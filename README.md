@@ -41,3 +41,4 @@ y_train (true values for training): [200000, 300000, 100000]
 X_test (for testing): [[250], [150]]
 y_test (true values for testing): [250000, 150000]
 ```
+2. Ranking funnel: In recommendation systems, this refers to a multi-stage process (sourcing, early-stage ranking, late-stage ranking) that progressively filters and orders items to be presented to a user, with each stage handling fewer candidates as operations become more computationally expensive.
