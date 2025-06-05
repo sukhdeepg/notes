@@ -42,3 +42,5 @@ X_test (for testing): [[250], [150]]
 y_test (true values for testing): [250000, 150000]
 ```
 2. Ranking funnel: In recommendation systems, this refers to a multi-stage process (sourcing, early-stage ranking, late-stage ranking) that progressively filters and orders items to be presented to a user, with each stage handling fewer candidates as operations become more computationally expensive.
+
+3. Model registry: A centralized repository in MLOps (Machine Learning Operations) that manages the lifecycle of machine learning models, serving as a version control system to track and manage models from development to deployment.
