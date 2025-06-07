@@ -46,3 +46,5 @@ y_test (true values for testing): [250000, 150000]
 3. Model registry: A centralized repository in MLOps (Machine Learning Operations) that manages the lifecycle of machine learning models, serving as a version control system to track and manage models from development to deployment.
 
 4. Model launch tooling: Tools and processes designed to streamline the deployment of new machine learning models into production environments, often including steps for estimation, approval, preparation, scaling, and finalization, similar to how MLflow or Kubeflow help automate the transition of models from development to live service.
+
+5. Model stability: Refers to a machine learning model's ability to produce consistent and accurate predictions even when faced with slight variations or noise in input data, ensuring its robustness and trustworthiness in real-world scenarios. For example, a stable facial recognition model will correctly identify a person even if their lighting or angle in the image changes slightly.
