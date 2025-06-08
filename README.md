@@ -48,3 +48,5 @@ y_test (true values for testing): [250000, 150000]
 4. Model launch tooling: Tools and processes designed to streamline the deployment of new machine learning models into production environments, often including steps for estimation, approval, preparation, scaling, and finalization, similar to how MLflow or Kubeflow help automate the transition of models from development to live service.
 
 5. Model stability: Refers to a machine learning model's ability to produce consistent and accurate predictions even when faced with slight variations or noise in input data, ensuring its robustness and trustworthiness in real-world scenarios. For example, a stable facial recognition model will correctly identify a person even if their lighting or angle in the image changes slightly.
+
+6. Model calibration: This process adjusts a model so that its predicted probabilities are reliable indicators of real-world likelihoods. For example, if a medical diagnosis model predicts a patient has a 70% chance of a certain condition, then among all patients for whom it predicts a 70% chance, approximately 70% should actually have that condition.
