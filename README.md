@@ -54,3 +54,11 @@ y_test (true values for testing): [250000, 150000]
 7. Model Normalized Entropy (NE): This metric evaluates how effectively our model reduces the uncertainty in its predictions compared to a very basic approach. It's calculated by taking our model's cross-entropy (which measures how close its predictions are to actual outcomes, with lower values indicating better performance) and dividing it by the cross-entropy of a simple baseline model that just predicts the average frequency of the event. A lower NE value indicates our model is significantly better at reducing prediction uncertainty.  
 
 Real-world example: Imagine we have a model predicting whether an online ad will be clicked. If, on average, 5% of ads are clicked, a naive baseline model would always predict a 5% click probability for every ad. Our advanced model, however, makes specific predictions (e.g., 20% click chance for one ad, 1% for another). Normalized Entropy essentially tells us how much more precisely our model predicts individual ad clicks, significantly reducing the guesswork compared to just using the overall 5% average.
+
+8. **Multi-task-multi-label (MTML) model**: This is a type of deep learning model, such as a **Transformer-based model** (common in NLP and computer vision), that's designed to perform several different classification tasks simultaneously. Within any of these tasks, a single item can also be associated with multiple categories or labels.
+
+**Real-world Model and Example**:
+Imagine a **Transformer-based MTML model** used by a social media platform to analyze user-uploaded images. This single model could:
+1.  **Task 1: Object Recognition**: Identify multiple objects in the image (e.g., classifying a single image as containing `cat`, `tree`, and `sky`).
+2.  **Task 2: Scene Classification**: Simultaneously categorize the image's environment (e.g., classifying it as `outdoor` and `daytime`).
+3.  **Task 3: Safety Violation Detection**: While doing the above, also detect if the image contains `violence` and `graphic content` (multi-label within the safety task).
