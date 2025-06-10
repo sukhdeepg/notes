@@ -1,14 +1,3 @@
-## Evaluation
-1. Mean Average Precision @ k (MAP@k)  
-* **Core Idea:** Measures how well a system places *unique relevant items* at the *very top (ranks 1-k)* of its ranked lists, averaged across many searches.
-* **Mental Model:** Users care most about the first few results. MAP@k rewards systems that consistently put the best answers right there.
-* **Simple Example:**
-    * Let's take `k = 3`
-    * **Correct Answers:** `A, B`
-    * **Our Top 3:** `A, C, A`
-    * We get credit for the 1st `A`. `C` is wrong (no credit). The 2nd `A` is ignored because `A` was already credited. Only the *first unique correct* item counts.
-
-## Misc
 1. `train_test_split`  
 Separates our data into two sets for model training and evaluation:
 
@@ -62,3 +51,12 @@ Imagine a **Transformer-based MTML model** used by a social media platform to an
 1.  **Task 1: Object Recognition**: Identify multiple objects in the image (e.g., classifying a single image as containing `cat`, `tree`, and `sky`).
 2.  **Task 2: Scene Classification**: Simultaneously categorize the image's environment (e.g., classifying it as `outdoor` and `daytime`).
 3.  **Task 3: Safety Violation Detection**: While doing the above, also detect if the image contains `violence` and `graphic content` (multi-label within the safety task).
+
+9. Mean Average Precision @ k (MAP@k)  
+* **Core Idea:** Measures how well a system places *unique relevant items* at the *very top (ranks 1-k)* of its ranked lists, averaged across many searches.
+* **Mental Model:** Users care most about the first few results. MAP@k rewards systems that consistently put the best answers right there.
+* **Simple Example:**
+    * Let's take `k = 3`
+    * **Correct Answers:** `A, B`
+    * **Our Top 3:** `A, C, A`
+    * We get credit for the 1st `A`. `C` is wrong (no credit). The 2nd `A` is ignored because `A` was already credited. Only the *first unique correct* item counts.
