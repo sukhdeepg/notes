@@ -106,6 +106,50 @@ Imagine a **Transformer-based MTML model** used by a social media platform to an
         * Solution: Create separate binary columns (is_red: 0/1, is_blue: 0/1)
         * Example: Color [red, blue] → red_0, red_1, blue_0, blue_1
 
+    * **Nominal (High Cardinality) → Binary encoding**
+        * Problem: One-hot creates too many columns (100 categories = 100 columns)
+        * Solution: Convert to binary representation using fewer columns
+        * Example: 8 categories need only 3 binary columns (2³=8): Cat1→001, Cat2→010, Cat3→011
+        * Example: Cities [NYC, LA, Chicago, Miami] → 2 binary columns can represent 4 cities:
+            * NYC: [0,0], LA: [0,1], Chicago: [1,0], Miami: [1,1]
+
+   * **Nominal (Target-Correlated) → Target encoding**
+        * Problem: Some categories are much better predictors than others, but one-hot encoding treats them all equally
+        * Example: We're predicting whether customers will buy a product (target: 0=No, 1=Yes)
+        * Step 1 - Our training data looks like this:
+            ```
+            Customer_Job    | Will_Buy (Target)
+            Doctor         | 1
+            Doctor         | 1  
+            Doctor         | 0
+            Teacher        | 0
+            Teacher        | 0
+            Teacher        | 1
+            Unemployed     | 0
+            Unemployed     | 0
+            Unemployed     | 0
+            ```
+        * Step 2 - Calculate average target for each category:
+            ```python
+            # What we calculate behind the scenes:
+            Doctor: (1+1+0)/3 = 0.67     # 67% of doctors buy
+            Teacher: (0+0+1)/3 = 0.33     # 33% of teachers buy  
+            Unemployed: (0+0+0)/3 = 0.00  # 0% of unemployed buy
+            ```
+        * Step 3 - Replace categories with these calculated averages:
+            ```
+            Original: [Doctor, Teacher, Unemployed, Doctor]
+            Encoded:  [0.67,  0.33,   0.00,      0.67]
+            ```
+        * Why this works: The model now sees that Doctor=0.67 (high chance of buying) vs Unemployed=0.00 (low chance)
+        * Risk: If we only had 1 doctor in training who didn't buy, we'd wrongly encode all doctors as 0.00
+        * Code example:
+            ```python
+            # Calculate target encoding
+            target_means = df.groupby('Job')['Will_Buy'].mean()
+            df['Job_encoded'] = df['Job'].map(target_means)
+            ```
+
     * **Ordinal → Label encoding** 
         * Problem: Need to preserve the ranking order
         * Solution: Convert to numbers that maintain order (Poor=1, Fair=2, Good=3)
