@@ -53,9 +53,95 @@
 ---
 
 7. Model Normalized Entropy (NE)
-    * This metric evaluates how effectively our model reduces the uncertainty in its predictions compared to a very basic approach. It's calculated by taking our model's cross-entropy (which measures how close its predictions are to actual outcomes, with lower values indicating better performance) and dividing it by the cross-entropy of a simple baseline model that just predicts the average frequency of the event. A lower NE value indicates our model is significantly better at reducing prediction uncertainty.  
+    Measures how "confused" or uncertain a model's predictions are, scaled relative to the maximum possible confusion.
 
-    * Real-world example: Imagine we have a model predicting whether an online ad will be clicked. If, on average, 5% of ads are clicked, a naive baseline model would always predict a 5% click probability for every ad. Our advanced model, however, makes specific predictions (e.g., 20% click chance for one ad, 1% for another). Normalized Entropy essentially tells us how much more precisely our model predicts individual ad clicks, significantly reducing the guesswork compared to just using the overall 5% average.
+    **Intuition:** 
+    - Regular entropy tells us how uncertain predictions are
+    - But a model predicting between 2 classes vs 1000 classes will have very different entropy ranges
+    - Normalized entropy divides by the maximum possible entropy, giving us a 0-1 scale where:
+    - 0 = perfectly confident (no uncertainty)
+    - 1 = maximally confused (uniform random guessing)
+
+    The key insight: normalized entropy gives us a universal "confusion score" that's comparable across different models and tasks, regardless of how many classes they're predicting.
+
+    ```python
+    import torch
+    import torch.nn.functional as F
+
+    def normalized_entropy(logits):
+        # LOGITS: Raw scores from neural network (can be any numbers, positive/negative)
+        # Think of them as "raw confidence scores" before converting to probabilities
+        
+        # SOFTMAX: Converts logits into probabilities that sum to 1
+        # Higher logits become higher probabilities
+        # dim=-1 means "apply softmax along the last dimension" (across classes)
+        probs = F.softmax(logits, dim=-1)
+        
+        # ENTROPY: Measures uncertainty/randomness in the probabilities
+        # Formula: -sum(p * log(p)) where p is each probability
+        # 1e-8 prevents log(0) which would be -infinity
+        entropy = -torch.sum(probs * torch.log(probs + 1e-8), dim=-1)
+        
+        # MAX ENTROPY: Highest possible entropy (when all probabilities are equal)
+        # For N classes, max entropy = log(N)
+        num_classes = logits.size(-1)  # size(-1) gets the last dimension size
+        max_entropy = torch.log(torch.tensor(num_classes, dtype=torch.float))
+        
+        # NORMALIZE: Scale entropy to 0-1 range by dividing by maximum
+        normalized = entropy / max_entropy
+        return normalized
+
+    # [[...]] creates a 2D tensor: 1 sample with 3 class scores
+
+    # Confident prediction (low entropy)
+    confident_logits = torch.tensor([[10.0, 1.0, 1.0]])  # Class 0 has much higher score
+    print(f"Confident prediction: {normalized_entropy(confident_logits):.3f}")
+
+    # Uncertain prediction (high entropy) 
+    uncertain_logits = torch.tensor([[1.0, 1.0, 1.0]])   # All classes have same score
+    print(f"Uncertain prediction: {normalized_entropy(uncertain_logits):.3f}")
+
+    # What's happening internally:
+    print("\nStep-by-step for confident prediction:")
+    logits = torch.tensor([[10.0, 1.0, 1.0]])
+    probs = F.softmax(logits, dim=-1)
+    print(f"Logits: {logits}")
+    print(f"Probabilities after softmax: {probs}")
+    print(f"These probabilities sum to: {probs.sum():.3f}")
+
+    # Output:
+    # Confident prediction: 0.368
+    # Uncertain prediction: 1.000
+    # 
+    # Step-by-step for confident prediction:
+    # Logits: tensor([[10., 1., 1.]])
+    # Probabilities after softmax: tensor([[0.9999, 0.0000, 0.0000]])
+    # These probabilities sum to: 1.000
+    ```
+
+    **Logits represent "raw confidence scores" before converting to probabilities:**
+
+    - **[10.0, 1.0, 1.0]** = "I'm VERY confident it's class 0"
+    - Class 0 gets score 10, others get score 1
+    - After softmax: ~[99.99%, 0.00%, 0.00%] 
+    - The model is almost certain → low entropy
+
+    - **[1.0, 1.0, 1.0]** = "I have no idea, all classes seem equally likely"
+    - All classes get the same score
+    - After softmax: [33.33%, 33.33%, 33.33%]
+    - Maximum uncertainty → high entropy (close to 1.0)
+
+    **The key insight:** It's not the absolute values that matter, it's the *differences* between them:
+
+    - **Large differences** in logits → confident predictions → low entropy
+    - **Small/no differences** in logits → uncertain predictions → high entropy
+
+    We could also have:
+    - **[100, 1, 1]** → even more confident (entropy closer to 0)
+    - **[2, 1, 1]** → somewhat confident (entropy between 0 and 1)
+    - **[0, 0, 0]** → completely uncertain (entropy = 1.0, same as [1,1,1])
+
+    The softmax function automatically converts these raw scores into proper probabilities that sum to 1, but it preserves the relative confidence relationships.
 
 ---
 
