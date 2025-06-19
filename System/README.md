@@ -193,8 +193,336 @@ Scores by: relevance to "pizza restaurant" → sorted list
 Returns: Top 10 results with scores
 ```
 
-### Key Point
+Key Point
 Elasticsearch doesn't understand meaning like humans do. It matches words, counts frequencies, and uses math to rank results. ML adds semantic understanding on top of this basic matching.
+
+⚙️ Split brain problem in Redis  
+**The Core Issue:** When the Redis cluster gets network partitioned, isolated nodes can't tell if the master is dead or just unreachable. Multiple nodes might promote themselves to master, creating chaos with conflicting data writes.
+
+- **What Goes Wrong:**
+    - Network partition splits our cluster into isolated islands
+    - Each island thinks the master is down and elects a new one
+    - Now we have multiple masters accepting different writes
+    - Data becomes inconsistent and irreconcilable
+
+### What is Redis Sentinel?
+Redis Sentinel is a **separate lightweight process** that runs on its own servers (not on our Redis data nodes). Think of it as an external referee that watches our Redis cluster and makes failover decisions.
+
+- **Key Points:**
+    - Sentinel runs as independent processes on dedicated servers
+    - We typically deploy 3 or 5 Sentinel instances across different availability zones
+    - Each Sentinel continuously monitors our Redis masters and replicas
+    - They communicate with each other to make collective decisions
+
+### The Quorum Magic
+- **How it works:**
+    - Sentinel requires majority agreement (quorum) before promoting a new master
+    - With 3 Sentinels: need 2 votes minimum
+    - With 5 Sentinels: need 3 votes minimum
+    - Network partitions can only leave majority on ONE side, never both
+
+- **Why this prevents split brain:**
+    - **Partition Example with 3 Sentinels:**
+        - Side A: 1 Sentinel (minority) → Cannot promote master
+        - Side B: 2 Sentinels (majority) → Can promote master
+    - **Result: Only ONE master exists at any time**
+
+- Quick Summary
+    - **Problem:** Network splits create multiple masters with conflicting data
+    - **Solution:** Sentinel acts as external referee requiring majority vote
+    - **Key:** Majority can only exist on one side of any partition
+    - **Deployment:** Run Sentinel on separate servers from our Redis data nodes
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Sentinel-1  │    │ Sentinel-2  │    │ Sentinel-3  │
+│ (Zone A)    │    │ (Zone B)    │    │ (Zone C)    │
+└─────────────┘    └─────────────┘    └─────────────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                           ▼
+                ┌─────────────────┐
+                │   Redis Master  │
+                │   (Zone A)      │
+                └─────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Replica   │    │   Replica   │    │   Replica   │
+│  (Zone A)   │    │  (Zone B)   │    │  (Zone C)   │
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+
+## Network Partition Scenario:
+
+```
+┌─────────────┐    │    ┌─────────────┐    ┌─────────────┐
+│ Sentinel-1  │    │    │ Sentinel-2  │    │ Sentinel-3  │
+│ (Zone A)    │    │    │ (Zone B)    │    │ (Zone C)    │
+└─────────────┘    │    └─────────────┘    └─────────────┘
+       │           │           │                   │
+       ▼           │           └───────────────────┘
+┌─────────────┐    │                       │
+│   Master    │    │                       │
+│  (Dead?)    │    │           Only 2 Sentinels
+└─────────────┘    │           Majority = 2/3 ✓
+                   │           Can elect new master
+                   │                       │
+            PARTITION                      ▼
+                   │                ┌─────────────┐
+                   │                │   Replica   │ → Promoted to Master
+                   │                │  (Zone B)   │
+                   │                └─────────────┘
+```
+
+⚙️ Service Registry & Discovery
+In microservices, services need to find and communicate with each other. Hard-coding IP addresses doesn't work because:
+- Service instances start/stop dynamically
+- IP addresses change with scaling/deployments
+- Load balancing requires knowing all available instances
+
+### Solution
+**Service Registry:** Central database of all service instances and their locations  
+**Service Discovery:** Mechanism for services to find each other
+
+### Three Approaches
+- Client-Side Discovery
+    - Client queries registry directly and chooses instance
+
+- Server-Side Discovery
+    - Load balancer queries registry and routes requests
+
+- DNS-Based Discovery
+    - Services register with DNS server, clients resolve service names to IP addresses using standard DNS lookups. The DNS server returns multiple A records for load balancing or SRV records for port information.
+
+### Real-World Examples
+- Netflix Eureka
+    - Services register themselves on startup
+    - Clients cache service locations locally
+    - Handles thousands of service instances
+- Consul (HashiCorp)
+    - DNS-based service discovery using standard DNS queries
+    - Health checking built-in
+    - Used by companies like Uber, Airbnb
+- Kubernetes Service Discovery
+    - Built-in DNS for service discovery (CoreDNS)
+    - Services accessible via service names like `user-service.default.svc.cluster.local`
+    - Automatic load balancing
+
+- Key Concepts
+    - **Registration:** Services announce their location when they start
+    - **Discovery:** Clients find services by name, get list of healthy instances
+    - **Health Checking:** Registry monitors service health via heartbeats/health endpoints
+    - **Load Balancing:** Client chooses which instance to call (client-side) or load balancer does it (server-side)
+
+- When to Use
+    - Multiple instances of same service
+    - Dynamic scaling (containers/cloud)
+    - Services need to communicate
+    - High availability requirements
+
+The example shows a basic in-memory registry. Production systems use distributed registries like Consul, etcd, or cloud-native solutions.
+```python
+# Service Registry
+import threading
+from typing import Dict, List
+import time
+
+class ServiceRegistry:
+    def __init__(self):
+        self.services: Dict[str, List[dict]] = {}
+        self.services_lock = threading.Lock()
+        self.service_heartbeat_thread = threading.Thread(target=self._service_heartbeat)
+        self.service_heartbeat_thread.daemon = True
+        self.service_heartbeat_thread.start()
+
+    def register_service(self, service_name: str, host: str, port: int, health_check_url: str = None):
+        """Register a service instance"""
+        with self.services_lock:
+            if service_name not in self.services:
+                self.services[service_name] = []
+            
+            service_info = {
+                'host': host,
+                'port': port,
+                'health_check_url': health_check_url,
+                'last_heartbeat': time.time(),
+                'healthy': True
+            }
+            
+            # Remove existing instance if it exists
+            self.services[service_name] = [s for s in self.services[service_name] 
+                                         if not (s['host'] == host and s['port'] == port)]
+            
+            self.services[service_name].append(service_info)
+            
+        print(f"Registered service {service_name} at {host}:{port}")
+
+    def deregister_service(self, service_name: str, host: str, port: int):
+        """Deregister a service instance"""
+        with self.services_lock:
+            if service_name in self.services:
+                self.services[service_name] = [s for s in self.services[service_name] 
+                                             if not (s['host'] == host and s['port'] == port)]
+                if not self.services[service_name]:
+                    del self.services[service_name]
+                    
+        print(f"Deregistered service {service_name} at {host}:{port}")
+
+    def get_service_instances(self, service_name: str) -> List[dict]:
+        """Get all healthy instances of a service"""
+        with self.services_lock:
+            if service_name in self.services:
+                return [s for s in self.services[service_name] if s['healthy']]
+            return []
+
+    def heartbeat(self, service_name: str, host: str, port: int):
+        """Update heartbeat for a service instance"""
+        with self.services_lock:
+            if service_name in self.services:
+                for service in self.services[service_name]:
+                    if service['host'] == host and service['port'] == port:
+                        service['last_heartbeat'] = time.time()
+                        service['healthy'] = True
+                        break
+
+    def _service_heartbeat(self):
+        """Background thread to check service heartbeats"""
+        while True:
+            current_time = time.time()
+            with self.services_lock:
+                for service_name, instances in self.services.items():
+                    for instance in instances:
+                        # Mark as unhealthy if no heartbeat for 30 seconds
+                        if current_time - instance['last_heartbeat'] > 30:
+                            instance['healthy'] = False
+            
+            time.sleep(10)  # Check every 10 seconds
+
+    def health_check(self):
+        """Perform health checks on all registered services"""
+        import requests
+        
+        with self.services_lock:
+            for service_name, instances in self.services.items():
+                for instance in instances:
+                    if instance['health_check_url']:
+                        try:
+                            response = requests.get(instance['health_check_url'], timeout=5)
+                            instance['healthy'] = response.status_code == 200
+                        except Exception:
+                            instance['healthy'] = False
+
+# Service Discovery Client
+class ServiceDiscoveryClient:
+    def __init__(self, registry: ServiceRegistry):
+        self.registry = registry
+
+    def discover_service(self, service_name: str) -> dict:
+        """Discover a service instance (simple round-robin)"""
+        instances = self.registry.get_service_instances(service_name)
+        if not instances:
+            return None
+        
+        # Simple round-robin selection
+        return instances[0]
+
+# Example usage
+def main():
+    # Create registry
+    registry = ServiceRegistry()
+    
+    # Register services
+    registry.register_service("user-service", "192.168.1.100", 8080, "http://192.168.1.100:8080/health")
+    registry.register_service("user-service", "192.168.1.101", 8080, "http://192.168.1.101:8080/health")
+    registry.register_service("order-service", "192.168.1.102", 8080, "http://192.168.1.102:8080/health")
+    
+    # Discover service
+    client = ServiceDiscoveryClient(registry)
+    user_service = client.discover_service("user-service")
+    
+    if user_service:
+        print(f"Found user service at {user_service['host']}:{user_service['port']}")
+    else:
+        print("User service not found")
+
+if __name__ == "__main__":
+    main()
+```
+
+### AWS Technologies for Service Registry and Discovery
+- AWS Cloud Map
+    - **What:** Managed service discovery service
+    - **Best for:** Microservices architectures
+
+**Example:**
+
+```python
+# Service Registration
+import boto3
+
+servicediscovery = boto3.client('servicediscovery')
+
+# Register service instance
+servicediscovery.register_instance(
+    ServiceId='srv-xyz123',
+    InstanceId='user-service-1',
+    Attributes={
+        'AWS_INSTANCE_IPV4': '10.0.1.100',
+        'AWS_INSTANCE_PORT': '8080'
+    }
+)
+
+# Client Discovery
+instances = servicediscovery.discover_instances(
+    NamespaceName='myapp.local',
+    ServiceName='user-service'
+)
+
+service_url = f"http://{instances['Instances'][0]['Attributes']['AWS_INSTANCE_IPV4']}:{instances['Instances'][0]['Attributes']['AWS_INSTANCE_PORT']}"
+```
+
+- Application Load Balancer (ALB) + Target Groups
+    - **What:** Load balancer with built-in service discovery
+    - **Best for:** Container workloads (ECS/EKS)
+
+**Example:**
+
+```python
+# Client just calls the ALB endpoint
+import requests
+
+# ALB routes to healthy instances
+response = requests.get('https://api.myapp.com/users')
+```
+
+- ECS Service Discovery
+    - **What:** Built into ECS, uses Cloud Map under the hood
+    - **Best for:** ECS tasks
+
+**Example:**
+
+```yaml
+# ECS Task Definition
+services:
+  user-service:
+    image: user-service:latest
+    # Automatically registered as user-service.myapp.local
+```
+
+```python
+# Client discovery
+response = requests.get('http://user-service.myapp.local:8080/api/users')
+```
+
+- Route 53 (DNS-based)
+    - **What:** DNS service for simple service discovery
+    - **Best for:** Simple setups, health checks
+
+**Recommendation:** Use **AWS Cloud Map** for most microservices scenarios - it's purpose-built for this and integrates well with ECS/EKS.
 
 ---
 
@@ -281,11 +609,11 @@ ROLLBACK; -- Undoes all changes if something goes wrong
     - Data is written to disk, not just kept in memory
     - **Example:** Even if the server crashes after `COMMIT`, the money transfer is saved
 
-### Key Points
-  * Transactions solve the problem of partial failures in multi-step operations
-  * ROLLBACK happens automatically if any error occurs (or manually with ROLLBACK command)
-  * MySQL's default isolation level is REPEATABLE READ
-  * Use transactions for any operation that involves multiple related changes
-  * Always handle exceptions in application code to ensure proper ROLLBACK
+- Key Points
+    - Transactions solve the problem of partial failures in multi-step operations
+    - ROLLBACK happens automatically if any error occurs (or manually with ROLLBACK command)
+    - MySQL's default isolation level is REPEATABLE READ
+    - Use transactions for any operation that involves multiple related changes
+    - Always handle exceptions in application code to ensure proper ROLLBACK
 
 This ensures data integrity in scenarios like financial transfers, inventory updates, or any multi-table operations.
