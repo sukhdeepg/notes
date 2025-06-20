@@ -617,3 +617,102 @@ ROLLBACK; -- Undoes all changes if something goes wrong
     - Always handle exceptions in application code to ensure proper ROLLBACK
 
 This ensures data integrity in scenarios like financial transfers, inventory updates, or any multi-table operations.
+
+---
+
+## Microservice patterns
+⚙️ SAGA pattern  
+The **Saga pattern** is a way to manage distributed transactions across multiple microservices without using traditional two-phase commits, which don't scale well in microservices architectures.
+
+Core Concept: Instead of one big transaction, we break it into a series of smaller, independent transactions. If something fails partway through, we run compensating transactions to undo the previous steps.
+
+How It Works  
+There are two main approaches:
+- **Choreography** - Services communicate directly through events
+- **Orchestration** - A central coordinator manages the workflow
+
+E-commerce Order Processing  
+Let's say we're placing an order on Amazon:
+
+Services Involved:
+- Order Service
+- Payment Service
+- Inventory Service
+- Shipping Service
+
+**Orchestration Approach**  
+Technology Stack:
+- **Orchestrator:** Separate microservice (often called "Order Workflow Service")
+- **Technology:** Temporal, Netflix Conductor, or custom service using Spring Boot
+- **Communication:** Synchronous REST calls or asynchronous message queues
+- **State Management:** Database to track saga state and progress
+
+Flow:
+```
+Order Orchestrator receives "Place Order" request
+↓
+1. Order Service: Create order (PENDING) → REST call
+2. Payment Service: Charge credit card → REST call
+3. Inventory Service: Reserve items → REST call
+4. Shipping Service: Schedule delivery → REST call
+5. Order Service: Mark order as CONFIRMED → REST call
+```
+
+If Step 3 Fails (Out of Stock):
+```
+4. [Skip - never executed]
+3. [Failed - nothing to compensate]
+2. Payment Service: Refund charge → compensating REST call
+1. Order Service: Cancel order → compensating REST call
+```
+
+**Choreography Approach**  
+Technology Stack:
+- **Event Bus:** Apache Kafka, AWS EventBridge, or RabbitMQ
+- **Communication:** Asynchronous event publishing/subscribing
+- **No central orchestrator** - each service knows what to do next
+
+Flow:
+```
+1. Order Service: Creates order → publishes "OrderCreated" event to Kafka
+2. Payment Service: Subscribes to "OrderCreated" → charges card → publishes "PaymentProcessed"
+3. Inventory Service: Subscribes to "PaymentProcessed" → reserves items → publishes "ItemsReserved"
+4. Shipping Service: Subscribes to "ItemsReserved" → schedules delivery → publishes "ShippingScheduled"
+5. Order Service: Subscribes to "ShippingScheduled" → marks order CONFIRMED
+```
+
+If Step 3 Fails:
+```
+3. Inventory Service: publishes "ItemReservationFailed" event
+2. Payment Service: Subscribes to failure event → refunds charge → publishes "PaymentRefunded"
+1. Order Service: Subscribes to "PaymentRefunded" → cancels order
+```
+- Orchestrator Technologies:
+    - **Temporal:** Workflow-as-code platform, handles retries and state
+    - **Netflix Conductor:** Microservices orchestration engine
+    - **Custom:** Spring Boot service with state machine (Spring State Machine)
+    - **Cloud:** AWS Step Functions, Azure Logic Apps
+
+- Event Technologies:
+    - **Message Brokers:** Apache Kafka, RabbitMQ, AWS SQS/SNS
+    - **Event Sourcing:** Store events in event store (EventStore, Apache Kafka)
+    - **Database:** Outbox pattern with database triggers or CDC (Change Data Capture)
+
+- State Management:
+    - **Orchestration:** Saga state stored in database (PostgreSQL/MongoDB)
+    - **Choreography:** Each service tracks its own state, events provide coordination
+
+- Key Benefits:
+    - **No distributed locks** - each service manages its own data
+    - **Fault tolerance** - system can recover from failures
+    - **Scalability** - services remain independent
+
+- Points to Remember:
+    - **Orchestration** = centralized control, easier debugging, single point of failure
+    - **Choreography** = decentralized, more resilient, harder to track overall flow
+    - Saga ensures **eventual consistency**, not immediate consistency
+    - Compensating transactions must be **idempotent** (safe to retry)
+    - **Outbox pattern** often used with choreography to ensure reliable event publishing
+    - Choose orchestration for complex workflows, choreography for simpler ones
+
+The pattern trades immediate consistency for availability and partition tolerance - classic CAP theorem.
