@@ -716,3 +716,29 @@ If Step 3 Fails:
     - Choose orchestration for complex workflows, choreography for simpler ones
 
 The pattern trades immediate consistency for availability and partition tolerance - classic CAP theorem.
+
+⚙️ Timeout pattern  
+Core Concept: Set a maximum wait time for any service call - if no response comes within that limit, automatically terminate and handle gracefully instead of waiting forever.
+
+Key Mental Model Points
+- Defense Against Hanging
+    - Prevents the service from getting stuck waiting indefinitely for slow/dead dependencies
+    - Think of it as a "panic button" that automatically activates
+- Resource Protection
+    - Frees up threads, memory, and connections that would otherwise be locked up
+    - Stops one slow service from bringing down the entire system
+- Cascading Failure Prevention
+    - A slow service can cause other services to pile up waiting for it
+    - Timeouts break this chain reaction before it spreads
+- Graceful Degradation
+    - When timeout hits, return cached data, default values, or user-friendly error messages
+    - Better to give users something than nothing
+- Different Timeout Types
+    - **Connection:** How long to wait to establish connection
+    - **Read/Response:** How long to wait for data after connecting
+    - **Global:** Overall time limit for complex multi-service operations
+- Complement with Other Patterns
+    - **Retry:** Try again after timeout (with backoff)
+    - **Circuit Breaker:** Stop calling failing services temporarily
+
+The mental model: Think of timeouts as automatic "escape hatches" that keep our system responsive and prevent resource starvation when things go wrong.
