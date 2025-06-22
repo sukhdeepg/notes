@@ -742,3 +742,18 @@ Key Mental Model Points
     - **Circuit Breaker:** Stop calling failing services temporarily
 
 The mental model: Think of timeouts as automatic "escape hatches" that keep our system responsive and prevent resource starvation when things go wrong.
+
+⚙️ Strangler Fig pattern  
+The Strangler Fig Pattern is a strategy for incrementally refactoring a monolithic application into microservices by diverting traffic from the monolith to new services, piece by piece, until the monolith can be decommissioned. This approach minimizes risk during migration by allowing new functionalities to be built and tested independently, while the existing system remains operational.
+
+- Points:
+    - **Monolith:** The large, tightly coupled, legacy application being refactored.
+    - **New System/Microservices:** Smaller, independent services built to replace parts of the monolith's functionality.
+    - **Strangler Application/Facade:** An intermediary layer (e.g., a proxy, API gateway, or a new application) that intercepts requests intended for the monolith and routes them to either the monolith or the new services.
+    - **Incremental Migration:** The core principle of the pattern, where functionality is moved from the monolith to new services in small, manageable steps.
+    - **Traffic Diversion:** The process of routing specific requests away from the monolith and towards the new services.
+    - **Functionality Extraction:** Identifying a distinct business capability within the monolith to be extracted into a new service.
+    - **Decommissioning:** The final step where the original monolith is retired once all its functionality has been successfully migrated.
+    - **Reduced Risk:** By migrating incrementally, the impact of potential issues is localized to smaller parts of the system, rather than affecting the entire monolith.
+    - **Coexistence:** The monolith and the new services operate simultaneously during the migration period.
+    - **Non-Invasive:** The pattern allows for refactoring without requiring a complete rewrite or taking the entire system offline.
