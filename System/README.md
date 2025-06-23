@@ -788,3 +788,11 @@ Here's how it works simply:
 - **Shared Filesystem:** The Git Sync Container then "Updates" these fetched files onto a "Shared Filesystem". Both the Git Sync Container and the NGINX Server can access this same shared storage.
 - **NGINX Server (Main Application):** The NGINX server, which is a web server, "Reads" the `index.html` (and other files) directly from this Shared Filesystem to serve them.
 - **In essence:** The NGINX server doesn't need to know anything about Git or how to fetch files. Its only job is to serve files. The "GIT Sync Container" sidecar handles the entire process of getting the latest website content and placing it where NGINX can find it, keeping the NGINX server focused on its primary task.
+
+!(https://github.com/user-attachments/assets/a9c724a6-b3a5-405d-b452-97a1aed40ad5){width="400" height="300"}
+[Ref](https://images.app.goo.gl/5Ku1To2TkrhvUdFHA)
+
+---
+
+!(https://github.com/user-attachments/assets/0ba01175-dc4a-4af3-a4a9-b2b0487ffa4e){width="400" height="300"}
+[Ref](https://images.app.goo.gl/eER2ottwo831KbKN9)
