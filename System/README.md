@@ -757,3 +757,34 @@ The Strangler Fig Pattern is a strategy for incrementally refactoring a monolith
     - **Reduced Risk:** By migrating incrementally, the impact of potential issues is localized to smaller parts of the system, rather than affecting the entire monolith.
     - **Coexistence:** The monolith and the new services operate simultaneously during the migration period.
     - **Non-Invasive:** The pattern allows for refactoring without requiring a complete rewrite or taking the entire system offline.
+
+⚙️ Sidecar pattern 
+Core Concept
+- **Co-located Helper:** A sidecar is a separate container that runs alongside our main application in the same pod/host, handling cross-cutting concerns so our app can focus purely on business logic
+
+Key Mental Models
+- **"Personal Assistant" Model:** Think of the sidecar as a dedicated assistant that handles all the "administrative tasks" (logging, security, networking) while our main application focuses on its core job
+- **Shared Resources, Separate Responsibilities:** Both containers share the same CPU, memory, and network (communicate via `localhost`), but each has distinct roles - like roommates sharing an apartment but having different jobs
+- **Language-Agnostic Infrastructure:** Our Java app can use a C++ Envoy proxy sidecar for networking without any code changes - the sidecar handles the complexity
+
+Real-World Examples
+- **Service Mesh:** Envoy proxy sidecar in Istio/Linkerd handles all network traffic, load balancing, and security between microservices
+- **Logging:** Fluent Bit sidecar collects logs from the app and ships them to centralized logging (ELK stack)
+- **Configuration:** Consul Connect sidecar pulls config updates and injects them into our app
+
+Key Trade-off
+- **Benefit:** Clean separation + reusability across different apps and languages
+- **Cost:** Higher resource usage (now running 2+ containers per application instance)
+
+The mental model is essentially "modular infrastructure" - instead of baking cross-cutting concerns into every application, we compose them as separate, reusable components.
+
+### Sidecar Demo Example
+
+In this example, the **"GIT Sync Container"** is acting as the sidecar to the **"NGINX Server"**.
+
+Here's how it works simply:
+
+- **GIT Sync Container (Sidecar):** This container's job is to "Fetch" updates (like `index.html` or other website files) from the "Git Repository".
+- **Shared Filesystem:** The Git Sync Container then "Updates" these fetched files onto a "Shared Filesystem". Both the Git Sync Container and the NGINX Server can access this same shared storage.
+- **NGINX Server (Main Application):** The NGINX server, which is a web server, "Reads" the `index.html` (and other files) directly from this Shared Filesystem to serve them.
+- **In essence:** The NGINX server doesn't need to know anything about Git or how to fetch files. Its only job is to serve files. The "GIT Sync Container" sidecar handles the entire process of getting the latest website content and placing it where NGINX can find it, keeping the NGINX server focused on its primary task.
