@@ -798,3 +798,37 @@ Here's how it works simply:
 <img src="https://github.com/user-attachments/assets/0ba01175-dc4a-4af3-a4a9-b2b0487ffa4e" width="400" height="300">
 <br>
 <a href="https://images.app.goo.gl/eER2ottwo831KbKN9">Ref</a>
+
+⚙️ Retry pattern 
+1. Reattempt failed operation after a delay.
+2. Addresses transient faults (temporary network issues, service unavailability, transient load spikes) that are expected to resolve themselves.
+3. Max retry parameter is used to define max number of retries that can be done.
+4. Exponential backoff: the delay increases exponentially with each subsequent retry (1s, 2s, 4s, 8s). This is to avoid overwhelming a struggling service.
+5. Jitter: Randomness added to the delay.
+6. Operations being retried should ideally be idempotent.
+7. E.g. Tenacity in Python
+
+```python
+from tenacity import retry, wait_fixed, stop_after_attempt, after_log
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@retry(wait=wait_fixed(2), stop=stop_after_attempt(3), after=after_log(logger, logging.WARNING))
+def call_external_service():
+    """Simulates a call to an external service that might fail."""
+    import random
+    if random.random() < 0.7:  # 70% chance of failure
+        logger.warning("External service call failed.")
+        raise ConnectionError("Simulated network error")
+    logger.info("External service call successful!")
+    return "Data from service"
+
+if __name__ == "__main__":
+    try:
+        result = call_external_service()
+        print(f"Operation completed: {result}")
+    except Exception as e:
+        print(f"Operation failed after retries: {e}")
+```
