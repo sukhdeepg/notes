@@ -900,3 +900,11 @@ Solves "dual write problem" - guarantees both database update AND event publishi
 - Recovery probe: In the “Half-Open” state, if the test request succeed, the circuit returns to “Closed”. If they “fail”, it returns to “Open” for another timeout period.
 - Fallback mechanism: Often combined with fallback strategy (e.g. returning cached data, default values or an error) when the circuit is open, providing a graceful degradation of service.
 - Technologies: Netflix Hystrix, Resilience4j, Istio/Linkerd.
+
+⚙️ Canary deployment pattern
+- Deploying new version (“the canary”) to a small percentage of live traffic or users first, rather than switching all traffic at once.
+- Allows real world testing and monitoring of the new version with minimal impact.
+- Switch using load balancers based on rules (e.g. 5% to canary, 95% to old).
+- This can also be based on specific user segments (e.g. internal employees, beta testers).
+- Can be combined with A/B testing, where different versions are shown to specific user segments to evaluate the business impact.
+- Similar to Blue-Green, managing database changes can be complex, especially if Canary interacts with the same DB as the old version. Backward compatibility is the key.
