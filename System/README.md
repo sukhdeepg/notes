@@ -888,3 +888,15 @@ Key Benefit:
 Solves "dual write problem" - guarantees both database update AND event publishing happen together.
 
 ⚙️ [Command Query Responsibility Segregation (CQRS)](https://microservices.io/patterns/data/cqrs.html)
+
+⚙️ Circuit breaker  
+- Prevents cascading failures.
+- When service experiences repeated failures, the “circuit” to that service “trips”.
+- Circuit breaker monitors calls to a service, tracking success and failure rates.
+- 3 states
+    - Closed: Requests are allowed through to the service. Failures are counted.
+    - Open: If the failure rate exceeds a configurable threshold within a defined time window, the circuit “trips” open. Subsequent requests are rejected.
+    - Half-Open: After a configured timeout in the “Open” state, the circuit transitions to “Half-Open”. A limited number of test requests are allowed through the service.
+- Recovery probe: In the “Half-Open” state, if the test request succeed, the circuit returns to “Closed”. If they “fail”, it returns to “Open” for another timeout period.
+- Fallback mechanism: Often combined with fallback strategy (e.g. returning cached data, default values or an error) when the circuit is open, providing a graceful degradation of service.
+- Technologies: Netflix Hystrix, Resilience4j, Istio/Linkerd.
