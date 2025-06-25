@@ -886,3 +886,5 @@ Key Benefit:
     - **No lost events** - even if Kafka/RabbitMQ is down, events are safely stored in database and published when broker recovers.
 
 Solves "dual write problem" - guarantees both database update AND event publishing happen together.
+
+⚙️ [Command Query Responsibility Segregation (CQRS)](https://microservices.io/patterns/data/cqrs.html)
