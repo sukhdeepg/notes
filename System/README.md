@@ -832,3 +832,57 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Operation failed after retries: {e}")
 ```
+
+⚙️ Outbox pattern   
+Problem: Reliably publish events when updating database without losing events if message broker fails.
+Solution: Store events in same database transaction as business data, publish separately.
+
+Example:
+```sql
+CREATE TABLE orders (id, customer_id, amount, status);
+CREATE TABLE outbox_events (id, event_type, payload, published);
+```
+
+Service Code
+```python
+def create_order(order_data):
+    with db.transaction():
+        # Step 1: Save business data
+        order = db.execute(
+            "INSERT INTO orders (customer_id, amount, status) VALUES (?, ?, 'PENDING')",
+            [order_data['customer_id'], order_data['amount']]
+        )
+        
+        # Step 2: Save event (same transaction)
+        db.execute(
+            "INSERT INTO outbox_events (event_type, payload, published) VALUES (?, ?, false)",
+            ["OrderCreated", json.dumps({'order_id': order.id, 'amount': order.amount})]
+        )
+        
+        # Both succeed or both fail atomically
+```
+
+Background Publisher
+```python
+def event_publisher():
+    while True:
+        # Get unpublished events
+        events = db.execute("SELECT * FROM outbox_events WHERE published = false")
+        
+        for event in unpublished:
+            kafka.send('order-events', event.payload)  # Publish to message broker
+            db.execute("UPDATE outbox_events SET published = true WHERE id = ?", [event.id])
+        
+        time.sleep(1)
+```
+
+Flow:
+    - **Write**: Business data + event stored atomically in DB
+    - **Publish**: Background process publishes events from outbox
+    - **Mark**: Published events marked as complete
+    - **Retry**: Failed events stay unpublished, retry automatically
+
+Key Benefit:
+    - **No lost events** - even if Kafka/RabbitMQ is down, events are safely stored in database and published when broker recovers.
+
+Solves "dual write problem" - guarantees both database update AND event publishing happen together.
