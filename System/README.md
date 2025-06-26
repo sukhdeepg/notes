@@ -908,3 +908,39 @@ Solves "dual write problem" - guarantees both database update AND event publishi
 - This can also be based on specific user segments (e.g. internal employees, beta testers).
 - Can be combined with A/B testing, where different versions are shown to specific user segments to evaluate the business impact.
 - Similar to Blue-Green, managing database changes can be complex, especially if Canary interacts with the same DB as the old version. Backward compatibility is the key.
+
+⚙️ Bulkhead pattern  
+Core Concept: Isolates resources to prevent cascading failures - if one component fails, others remain unaffected.
+
+- Key Applications
+    - **Thread Pools**: Separate pools for different external calls/services
+    - **Connection Pools**: Isolated database/API connections per dependency
+    - **Circuit Breaker Integration**: Bulkhead isolates, Circuit Breaker detects/trips on failures
+
+Mental Model: **Ship with watertight compartments** - if one compartment floods (dependency fails), water stays contained and other compartments remain dry and functional.
+
+Example
+- E-commerce service uses:
+    - Dedicated thread pool for payment API calls
+    - Separate thread pool for inventory service calls
+    - Isolated connection pool for user database
+
+If payment API becomes slow/unresponsive, it only exhausts its dedicated resources - inventory and user operations continue normally.
+
+## Python Example
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+# Separate thread pools (bulkheads)
+payment_pool = ThreadPoolExecutor(max_workers=5)
+inventory_pool = ThreadPoolExecutor(max_workers=3)
+
+# If payment API hangs, only uses its 5 threads
+payment_pool.submit(call_payment_api, order_data)
+
+# Inventory calls remain unaffected
+inventory_pool.submit(check_inventory, product_id)
+```
+
+Prevents resource exhaustion in one area from bringing down the entire system.
