@@ -944,3 +944,14 @@ inventory_pool.submit(check_inventory, product_id)
 ```
 
 Prevents resource exhaustion in one area from bringing down the entire system.
+
+⚙️ Blue green deployment pattern  
+- Near zero downtime and rapid rollback.
+- Two production envs: blue and green. Only one is active at a given time. Other remains idle or is used for staging and testing the new version.
+- Blue: represents the current stable version of the application this is actively serving live user traffic.
+- Green: represents the new version of the application that is being prepared for deployment. It’s an exact replica of the blue environment, but runs the updated code.
+- Traffic is switched using load balancer (most common), DNS (less common, DNS propagation delays).
+- If green environment proves stable for a given period of time, blue environment can be decommissioned, or it can become the green environment for the next deployment.
+- Resource intensive: maintaining 2 full production grade environments.
+- Database schema change and data synchronization between blue and green can be complex especially with backward incompatible changes. Strategies like dual writing, schema evolution, or feature flags might be needed.
+- In canary, it’s gradual roll out to a subset of users. Here, it’s instantaneous switch.
