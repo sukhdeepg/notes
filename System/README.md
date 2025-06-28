@@ -524,6 +524,106 @@ response = requests.get('http://user-service.myapp.local:8080/api/users')
 
 **Recommendation:** Use **AWS Cloud Map** for most microservices scenarios - it's purpose-built for this and integrates well with ECS/EKS.
 
+⚙️ Redlock in Redis
+What Is Redlock?  
+Redlock is a distributed locking algorithm that provides exclusive access to shared resources across multiple Redis nodes. It ensures that only one client can hold a lock at any given time by requiring consensus from a majority of Redis masters.
+
+Core Concepts
+- **Distributed Lock**: Obtains time-bounded leases (locks) across multiple independent Redis nodes
+- **Core Guarantee**: Only one client can hold the lock at any moment, as long as the lock's TTL hasn't expired
+- **Key Strategy**: Acquire locks on a majority ([N/2] + 1) of N Redis masters within a short time window
+
+### Algorithm Deep Dive
+
+**1. Preparation Phase**: Before attempting to acquire a lock, we need to configure the following parameters:
+
+- **Essential Parameters:**
+- **N**: Total number of Redis masters (recommended: 5)
+- **Quorum**: [N/2] + 1 (e.g., 3 out of 5 nodes)
+- **Lock TTL**: Maximum time a lock can be held (e.g., 30 seconds)
+- **Timeout**: Maximum time to wait for lock acquisition process
+
+**2. Lock Acquisition Phase**: The acquisition process follows these critical steps:
+
+**Step 1: Record Start Time**
+```
+start_time = current_time_ms()
+```
+
+**Step 2: Sequential Lock Attempts** on each Redis master execute:
+```
+SET resource_name token PX 30000 NX
+```
+
+**Step 3: Evaluate Success** Current timestamp - start_time < lock_validity_period (time
+```
+elapsed_time = current_time_ms() - start_time
+valid_time = lock_ttl - elapsed_time - clock_drift
+```
+
+**Step 4: Determine Lock Status** Lock is successfully acquired if **both conditions are met:**
+• **Majority rule**: >= quorum
+• **Timing rule**: valid_time > 0
+
+If successful, the lock is valid for (TTL - elapsed_time - clock_drift) milliseconds.
+
+**3. Handle Failure If either condition fails, immediately release all acquired locks.**
+
+**Lock Release Phase**: Send release command to all Redis masters to prevent accidental cleanup of other clients' locks:
+
+**Script for Safe Release:**
+```lua
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+else
+    return 0
+end
+```
+
+This ensures atomicity and one-side — No lock token can release from some lock.
+
+### Safety vs Liveness Trade-offs
+
+**TTL Configuration Strategy**  
+- **Best Practices (30 seconds):**
+    - Allow enough time for business operations
+    - Include network latency and processing time
+
+- **Long TTL (e.g., 30 seconds):**
+    - **Advantage**: Safe for lengthy operations
+    - **Disadvantage**: Slow recovery during failures
+
+- **Recommended Configuration:**
+    - **Short lock operations**: 5-10 seconds
+    - **Long operations**: 30-60 seconds
+    - **Design management operations**: 2-5 minutes
+
+Let's run through a concrete example with N=5, quorum=3, TTL=30 seconds:
+```
+Time: 0ms    t0  = start_time
+Node 1: SET resource_name 12345 PX 30000 NX  ✓
+Node 2: SET resource_name 12345 PX 30000 NX  ✓
+Node 3: SET resource_name 12345 PX 30000 NX  ✓
+Node 4: SET resource_name 12345 PX 30000 NX  ✗
+Node 5: SET resource_name 12345 PX 30000 NX  ✗
+
+Time: 25ms
+Successfully acquired: 3/5 (quorum met)       ✓
+Elapsed time: 25ms (within TTL)               ✓
+Valid time: 30000 - 25 - 50 = 29925ms        ✓
+```
+
+- Key Observations:
+    - Redis's old lock doesn't prevent new lock acquisition once quorum is met
+    - The old lock will expire naturally on its own schedule
+    - If the new lock's TTL expires before work completes, other clients can acquire the lock using the same process
+
+- Best Practices
+    - **Choose odd numbers of Redis masters** (3, 5, 7) to avoid split-brain scenarios
+    - **Monitor lock acquisition latency** to detect network issues
+    - **Implement proper error handling** for partial lock acquisition failures
+    - **Use independent Redis instances** (not master-slave pairs) for true fault tolerance
+    - **Test failure scenarios** including network partitions and Redis node failures
 ---
 
 ## Database
