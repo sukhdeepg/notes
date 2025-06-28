@@ -624,6 +624,10 @@ Valid time: 30000 - 25 - 50 = 29925ms        ✓
     - **Implement proper error handling** for partial lock acquisition failures
     - **Use independent Redis instances** (not master-slave pairs) for true fault tolerance
     - **Test failure scenarios** including network partitions and Redis node failures
+
+<img src="https://github.com/user-attachments/assets/da24272b-93d5-425d-b4f2-ed946c269777" width="400" height="300">
+<br>
+<a href="https://images.app.goo.gl/huC8eWj9jsZfGF5Q8">Ref</a>
 ---
 
 ## Database
