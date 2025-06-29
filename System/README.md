@@ -670,6 +670,27 @@ Redis Streams provide **conditional at-least-once** delivery semantics, not at-m
 
 **Bottom Line:** Redis Streams provide at-least-once delivery **only** for consumer-level failures. For true at-least-once guarantees across all failure scenarios, we need distributed message broker designed for durability.
 
+⚙️ Redis NX working in distributed architecture  
+Idempotent Consumer (Dedup)
+```
+SET processed:<msgID> 1 NX EX 3600
+```
+- Only the first `SET` succeeds (others return `nil`) → first consumer processes; retries within 1h are dropped.
+- Atomic Check-and-Set (NX)
+    - **NX flag ensures `SET` only if key is absent, and is atomic because Redis processes commands sequentially in a single-threaded loop.**
+- TTL: EX vs. PX
+    - **EX `<seconds>`** → key expires after N seconds
+    - **PX `<milliseconds>`** → key expires after N ms (millisecond precision)
+- Distributed Sharding (Cluster)
+    - Keys routed to shards by `CRC16(key) mod 16384`; each shard is a standalone Redis instance retaining per-command atomicity.
+
+Quorum Lock (Redlock)
+```
+SET lock:<res> <token> NX PX 30000
+```
+
+Client attempts lock on multiple masters; lock is granted when a majority respond OK, preventing single-node failure issues.
+
 ---
 
 ## Database
