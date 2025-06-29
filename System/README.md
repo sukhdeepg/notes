@@ -670,6 +670,13 @@ Redis Streams provide **conditional at-least-once** delivery semantics, not at-m
 
 **Bottom Line:** Redis Streams provide at-least-once delivery **only** for consumer-level failures. For true at-least-once guarantees across all failure scenarios, we need distributed message broker designed for durability.
 
+⚙️ Redis NX  
+- **Command:** `SET <key> <value> NX EX <ttl>`
+- **When used:** to atomically create a key only if it doesn't already exist, and have it expire after `<ttl>` seconds.
+- **NX (Only set if Not eXists):** prevents overwriting an existing key—returns `OK` only when the key is new; otherwise returns `nil`.
+- **EX `<ttl>` (Expire):** sets a time-to-live in seconds so the key auto-deletes after `<ttl>` seconds.
+- **Use case:** common for distributed locks or deduplication—e.g., `SET lock_id token NX EX 30` acquires a 30s lock only if nobody else holds it.
+
 ⚙️ Redis NX working in distributed architecture  
 Idempotent Consumer (Dedup)
 ```
