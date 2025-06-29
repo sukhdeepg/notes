@@ -628,6 +628,48 @@ Valid time: 30000 - 25 - 50 = 29925ms        ✓
 <img src="https://github.com/user-attachments/assets/da24272b-93d5-425d-b4f2-ed946c269777" width="400" height="300">
 <br>
 <a href="https://images.app.goo.gl/huC8eWj9jsZfGF5Q8">Ref</a>
+
+⚙️ Redis Streams  
+Redis Streams provide **conditional at-least-once** delivery semantics, not at-most-once, but with important limitations.
+
+- How Redis Streams Work:
+    - When a consumer reads a message with `XREADGROUP`, the message is added to the **Pending Entries List (PEL)**
+    - The message remains in the PEL until explicitly acknowledged with `XACK`
+    - If the consumer crashes before sending `XACK`, the message stays in the PEL and can be reclaimed by another consumer using `XPENDING` and `XCLAIM`
+
+- At-most-once vs At-least-once:
+    - **At-most-once**: Message is delivered 0 or 1 times (risk of message loss, no duplicates)
+    - **At-least-once**: Message is delivered 1 or more times (no message loss, but possible duplicates)
+
+- Redis Streams Delivery Guarantees
+    - Against consumer failures: True at-least-once
+        - Consumer crashes after reading but before `XACK`
+        - Message remains in PEL, can be reclaimed by another consumer
+        - Same message may be processed multiple times
+
+- Against Redis server failures: No guarantee
+    - **PEL is stored in Redis memory**: If Redis crashes, PEL is lost
+    - **All unacknowledged messages are lost**: no way to reclaim them
+    - **Stream data itself can be lost** without proper persistence
+    - **Consumer group state is lost**: positions, tracking, everything
+
+- Persistence limitations:
+    - **RDB snapshots**: Gap between snapshots = potential data loss
+    - **AOF logging**: Still has fsync gaps, performance impact
+    - Even with persistence, we lose data between last write and crash
+
+- Industry Example - Fintech Trading Platform:
+    - A fintech platform uses Redis Streams for trade events with three consumer groups (Risk Analysis, Settlement Engine, Audit Logger).
+        - **What works:** If a risk analyst consumer crashes while processing a trade, another consumer can reclaim and reprocess it from the PEL.
+        - **What fails:** If Redis crashes during market hours, all unacknowledged trades in PELs are lost forever - potentially millions of dollars in unprocessed transactions. This is why real fintech systems:
+
+- Use Redis Streams for **non-critical, high-speed processing**
+- Combine with persistent message brokers (Kafka) for **critical trade data**
+- Implement **dual-write patterns** where critical events go to both systems
+- Use Redis clustering/replication for high availability
+
+**Bottom Line:** Redis Streams provide at-least-once delivery **only** for consumer-level failures. For true at-least-once guarantees across all failure scenarios, we need distributed message broker designed for durability.
+
 ---
 
 ## Database
