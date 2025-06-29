@@ -698,6 +698,122 @@ SET lock:<res> <token> NX PX 30000
 
 Client attempts lock on multiple masters; lock is granted when a majority respond OK, preventing single-node failure issues.
 
+⚙️ Redis Caching Strategy: Key-Value Basics to TTL, Invalidation & Tagging  
+Redis at its core is simple - we store data with a key and retrieve it later:
+```redis
+# Store a value
+SET "my-key" "my-value"
+
+# Get a value
+GET "my-key"
+# Returns: "my-value"
+```
+
+That's it! Redis is just a giant dictionary/map where we store `"key"` → `"value"` pairs.
+
+**Key Naming: Why Use Colons?**  
+Since Redis only has one flat namespace (no folders), developers use colons `:` to organize keys:
+```redis
+# Instead of random names:
+SET "abc123" "Taylor Swift Concert"
+SET "xyz789" "Madison Square Garden"
+
+# Use organized names:
+SET "event:12345" "Taylor Swift Concert"
+SET "venue:msg" "Madison Square Garden"
+SET "search:taylor-swift:2024" "list of events"
+```
+
+The colons are just part of the key name - like naming files `photo_vacation_beach.jpg` instead of `photo1.jpg`. Redis treats `"event:12345"` as one single key name.
+
+**TTL: Making Keys Expire**  
+Sometimes we want data to automatically disappear after some time:
+```redis
+# Normal SET (stays forever)
+SET "event:12345" "Taylor Swift Concert"
+
+# SET with expiration (disappears after 3600 seconds = 1 hour)
+SETEX "event:12345" 3600 "Taylor Swift Concert"
+
+# After 1 hour, this key automatically gets deleted
+GET "event:12345"  # Returns nothing
+```
+
+Real example:
+```redis
+# Cache search results for 1 hour
+SETEX "search:taylor-swift:2024" 3600 "[event1, event2, event3]"
+
+# After 1 hour, Redis automatically does: DEL "search:taylor-swift:2024"
+```
+
+Cache Invalidation: Manual Deletion  
+
+Instead of waiting for TTL, we can manually delete keys:
+```redis
+# Store some data
+SET "search:taylor-swift:2024" "[event1, event2, event3]"
+SET "event:12345" "Taylor Swift MSG Concert"
+
+# When Taylor Swift cancels a show, immediately remove related cache:
+DEL "search:taylor-swift:2024"
+DEL "event:12345"
+```
+
+**Redis Sets: Beyond Key-Value**  
+Redis also supports **Sets** - collections of unique items:
+```redis
+# Create a set and add items to it
+SADD "my-set" "item1" "item2" "item3"
+
+# See what's in the set
+SMEMBERS "my-set"
+# Returns: ["item1", "item2", "item3"]
+
+# Remove the entire set
+DEL "my-set"
+```
+
+**Cache Tags: Using Sets to Group Keys**  
+Here's the clever part - we can use Sets to keep track of related cache keys:
+```redis
+# First, store our actual cache data (normal key-value pairs)
+SET "search:taylor-swift:2024" "[event1, event2, event3]"
+SET "event:12345" "Taylor Swift Concert Details"
+SET "event:12346" "Another Taylor Swift Concert"
+
+# Then, create a "tag" that lists all Taylor Swift related keys
+SADD "tag:performer:taylor-swift" "search:taylor-swift:2024" "event:12345" "event:12346"
+```
+
+Now we have:
+- **Regular cache data:** `"search:taylor-swift:2024"` → `"[event1, event2, event3]"`
+- **Tag tracking which keys are Taylor Swift related:** `"tag:performer:taylor-swift"` → `{"search:taylor-swift:2024", "event:12345", "event:12346"}`
+
+**Putting It All Together: Bulk Invalidation**  
+When Taylor Swift data changes, we can find and delete ALL related cache at once:
+```redis
+# 1. Find all keys tagged as Taylor Swift related
+SMEMBERS "tag:performer:taylor-swift"
+# Returns: ["search:taylor-swift:2024", "event:12345", "event:12346"]
+
+# 2. Delete all those cache keys
+DEL "search:taylor-swift:2024" "event:12345" "event:12346"
+
+# 3. Delete the tag itself (cleanup)
+DEL "tag:performer:taylor-swift"
+```
+
+**Mental Model Summary**
+- **Main storage:** Key-value pairs for our actual cached data
+- **Organization:** Use colons in key names for organization (like file naming)
+- **Auto-cleanup:** TTL makes keys automatically expire
+- **Manual cleanup:** DEL removes keys immediately
+- **Grouping:** Sets act like "folders" that list which keys belong together
+- **Bulk operations:** Use the "folders" to find and delete related keys all at once
+
+The combination lets us say: "Delete everything related to Taylor Swift" without having to remember every single cache key - the tag set remembers them for us!
+
 ---
 
 ## Database
