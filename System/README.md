@@ -908,6 +908,171 @@ ROLLBACK; -- Undoes all changes if something goes wrong
 
 This ensures data integrity in scenarios like financial transfers, inventory updates, or any multi-table operations.
 
+⚙️ Race condition in DB  
+A race condition occurs when the outcome of operations depends on the unpredictable timing of events. In databases, this happens when multiple transactions access shared data simultaneously, and the final result depends on which transaction "wins the race."
+
+Classic Race Condition Example  
+**Scenario:** Two people trying to buy the last item in stock
+```sql
+-- Both transactions run simultaneously
+-- Transaction A (Person 1)
+START TRANSACTION;
+SELECT stock FROM products WHERE id = 1;  -- Returns 1 (last item)
+-- Context switch happens here - Transaction B runs
+UPDATE products SET stock = stock - 1 WHERE id = 1;  -- Sets stock to 0
+COMMIT;
+
+-- Transaction B (Person 2)
+START TRANSACTION;
+SELECT stock FROM products WHERE id = 1;  -- Also returns 1 (same item!)
+UPDATE products SET stock = stock - 1 WHERE id = 1;  -- Sets stock to -1
+COMMIT;
+```
+
+**Problem:** Stock becomes -1, meaning we sold 2 items when only 1 existed!  
+Types of Race Conditions  
+
+Lost Update Problem  
+**What happens:** One transaction's changes get overwritten
+
+```sql
+-- Initial balance: $1000
+-- Transaction A: Deposit $100
+-- Transaction B: Withdraw $50
+-- Both read $1000, calculate separately, last write wins
+-- Result: Either $1100 or $950 (other update is lost)
+```
+
+Dirty Read Problem  
+**What happens:** Reading uncommitted data that might be rolled back
+
+```sql
+-- Transaction A
+UPDATE accounts SET balance = 2000 WHERE id = 1;
+-- Transaction B reads balance as 2000
+-- Transaction A gets ROLLBACK due to error
+-- Transaction B made decisions based on invalid data
+```
+
+Non-Repeatable Read Problem  
+**What happens:** Same query returns different results within one transaction
+
+```sql
+-- Transaction A
+SELECT balance FROM accounts WHERE id = 1;  -- Returns $1000
+-- Transaction B commits a transfer
+SELECT balance FROM accounts WHERE id = 1;  -- Returns $500
+-- Same transaction, different results!
+```
+
+Solutions to Race Conditions
+
+Use Proper Isolation Levels
+```sql
+-- REPEATABLE READ prevents most race conditions
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+START TRANSACTION;
+SELECT stock FROM products WHERE id = 1;
+-- Stock value remains consistent throughout transaction
+UPDATE products SET stock = stock - 1 WHERE id = 1;
+COMMIT;
+```
+
+Pessimistic Locking
+```sql
+-- Lock the row immediately when reading
+START TRANSACTION;
+SELECT stock FROM products WHERE id = 1 FOR UPDATE;
+-- No other transaction can modify this row now
+IF stock > 0 THEN
+    UPDATE products SET stock = stock - 1 WHERE id = 1;
+END IF;
+COMMIT;
+```
+
+Optimistic Locking
+```sql
+-- Use version numbers or timestamps
+START TRANSACTION;
+SELECT stock, version FROM products WHERE id = 1;
+-- Application logic checks stock > 0
+UPDATE products 
+SET stock = stock - 1, version = version + 1
+WHERE id = 1 AND version = @original_version;
+-- If affected rows = 0, someone else modified it
+COMMIT;
+```
+
+Atomic Operations
+```sql
+-- Single statement that checks and updates
+UPDATE products 
+SET stock = stock - 1
+WHERE id = 1 AND stock > 0;
+-- Returns affected rows count
+-- If 0 rows affected, no stock available
+```
+
+Real-World Race Condition Scenarios  
+E-commerce Inventory
+```sql
+-- WRONG: Check then act
+SELECT stock FROM products WHERE id = 1;
+-- Another user might buy here
+UPDATE products SET stock = stock - 1 WHERE id = 1;
+
+-- RIGHT: Atomic check and update
+UPDATE products SET stock = stock - 1
+WHERE id = 1 AND stock > 0;
+```
+
+Banking Transfers
+```sql
+-- WRONG: Separate operations
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+
+-- RIGHT: Single transaction
+START TRANSACTION;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1 WHERE balance >= 100;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+```
+
+Counter/Sequence Generation
+```sql
+-- WRONG: Read then increment
+SELECT counter FROM sequences WHERE name = 'order_id';
+UPDATE sequences SET counter = counter + 1 WHERE name = 'order_id';
+
+-- RIGHT: Atomic increment
+UPDATE sequences SET counter = counter + 1 WHERE name = 'order_id';
+SELECT counter FROM sequences WHERE name = 'order_id';
+```
+
+Prevention Best Practices  
+- Application Level
+    - **Keep transactions short** - less time for race conditions to occur
+    - **Use database constraints** - let the database enforce rules
+    - **Handle retry logic** - gracefully handle failed operations due to conflicts
+    - **Validate assumptions** - check if conditions still hold before acting
+- Database Level
+    - **Choose appropriate isolation levels** - balance consistency vs performance
+    - **Use SELECT FOR UPDATE** when we plan to modify data we just read
+    - **Implement proper error handling** - handle deadlocks and constraint violations
+    - **Design schema with constraints** - prevent invalid states at database level
+
+- Key Points
+    - **Race conditions happen when timing matters** - multiple transactions accessing shared data
+    - **ACID properties help prevent race conditions** - especially Isolation and Consistency
+    - **"Check-then-act" patterns are dangerous** - state can change between check and action
+    - **Atomic operations are safer** - combine check and action in single statement
+    - **Higher isolation levels reduce race conditions** but hurt performance
+    - **Application code must handle retries** - database might reject conflicting transactions
+    - **Prevention is better than detection** - design to avoid race conditions
+
+**Key Principle:** In concurrent systems, never assume data remains unchanged between separate operations. Always use atomic operations or proper locking mechanisms.
+
 ---
 
 ## Microservice patterns
