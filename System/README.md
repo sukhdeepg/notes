@@ -1448,3 +1448,18 @@ Prevents resource exhaustion in one area from bringing down the entire system.
     - **asyncio alternative:** Modern Python also offers async/await for I/O-bound tasks
 
 The mental model: Python threading is like having multiple workers but only one work station - they take turns. Multiprocessing gives each worker their own station but costs more space.
+
+⚙️ Python daemon threads    
+Core Concept: Daemon threads in Python are background threads that automatically terminate when the main program exits, unlike regular threads which keep the program running until they complete.
+
+**Key Points**
+- **Definition** - Daemon threads are threads marked with `daemon=True` that run in the background and don't prevent program termination
+- **Lifecycle behavior** - When the main thread finishes, Python immediately kills all daemon threads without waiting for them to complete their work
+- **Setting daemon status** - Use `thread.daemon = True` before calling `thread.start()`, or pass `daemon=True` to the Thread constructor
+- **Default inheritance** - Threads inherit daemon status from their parent thread (main thread is non-daemon by default)
+- **Use cases** - Background tasks like logging, monitoring, periodic cleanup, or services that should stop when the main application stops
+- **Limitations** - Daemon threads cannot perform critical cleanup operations since they may be terminated abruptly mid-execution
+- **Program termination** - Python waits for all non-daemon threads to finish before exiting, but kills daemon threads immediately
+- **Thread safety** - Daemon status doesn't affect thread synchronization requirements - still need locks, queues, etc. for shared resources
+- **Checking status** - Use `thread.daemon` property to check if a thread is marked as daemon
+- **Cannot change after start** - Daemon status must be set before calling `thread.start()`, attempting to change it afterward raises RuntimeError
