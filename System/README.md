@@ -1410,3 +1410,41 @@ Prevents resource exhaustion in one area from bringing down the entire system.
 - Resource intensive: maintaining 2 full production grade environments.
 - Database schema change and data synchronization between blue and green can be complex especially with backward incompatible changes. Strategies like dual writing, schema evolution, or feature flags might be needed.
 - In canary, it’s gradual roll out to a subset of users. Here, it’s instantaneous switch.
+
+---
+
+## Language specific
+⚙️ Python threading and multi-processing  
+**GIL (Global Interpreter Lock)** - Python's fundamental constraint. Only one thread can execute Python bytecode at a time. Think of it as a single bathroom key in an office building.
+
+- Single Threading
+    - Default Python execution
+    - One task at a time, sequential processing
+    - Simple, predictable, no concurrency issues
+
+- Multi-threading (`threading` module)
+    - Multiple threads, but GIL allows only one to run Python code simultaneously
+    - **Good for:** I/O-bound tasks (file reading, network requests, database calls)
+    - **Bad for:** CPU-intensive tasks (calculations, data processing)
+    - Threads can release GIL during I/O operations, allowing others to work
+    - Why threading helps with I/O:** When Thread A waits for disk/network, it releases GIL, Thread B can work.
+
+- Multi-processing (`multiprocessing` module)
+    - Separate Python processes, each with its own GIL
+    - **Good for:** CPU-intensive tasks
+    - **Cost:** Higher memory usage, slower inter-process communication
+    - True parallelism for CPU-bound work
+
+- Use Single Threading when:
+    - Simple scripts
+    - Sequential processing is sufficient
+    - Avoiding complexity
+
+- Key Points
+    - **GIL limitation:** Python threading doesn't help CPU-bound tasks
+    - **I/O releases GIL:** Why threading works for network/file operations
+    - **Memory trade-off:** Multiprocessing uses more memory but gets true parallelism
+    - **Language comparison:** Java and Go have better native concurrency models
+    - **asyncio alternative:** Modern Python also offers async/await for I/O-bound tasks
+
+The mental model: Python threading is like having multiple workers but only one work station - they take turns. Multiprocessing gives each worker their own station but costs more space.
