@@ -1598,3 +1598,95 @@ Core Concept: Daemon threads in Python are background threads that automatically
 - **Thread safety** - Daemon status doesn't affect thread synchronization requirements - still need locks, queues, etc. for shared resources
 - **Checking status** - Use `thread.daemon` property to check if a thread is marked as daemon
 - **Cannot change after start** - Daemon status must be set before calling `thread.start()`, attempting to change it afterward raises RuntimeError
+
+⚙️ Normal, class and static methods in Python  
+- **Normal (Instance) Methods**
+    - Bound to specific object instances
+    - First parameter is **`self`** (the instance)
+    - Access/modify instance data
+    - Most common method type
+
+    ```python
+    class BankAccount:
+        def __init__(self, balance):
+            self.balance = balance
+
+        def withdraw(self, amount): # Normal Method
+            self.balance -= amount
+    ```
+
+- **Class Methods**
+    - Bound to the class, not the instance
+    - First parameter is **`cls`** (the class)
+    - Used for factory methods that create instances using alternative constructors
+    - Decorated with **`@classmethod`**
+
+    ```python
+    class Person:
+        def __init__(self, name, age):
+            self.name = name
+            self.age = age
+
+        @classmethod
+        def from_birth_year(cls, name, birth_year): # Alternative constructor
+            age = 2023 - birth_year
+            return cls(name, age) # Creates an Person instance
+
+        # This method is not in the original image but added for context of a static method
+        @staticmethod
+        def is_adult(age):
+            return age > 18
+    ```
+
+- **Static Methods**
+    - Not bound to class or instance
+    - No special first parameter
+    - Utility functions related to the class
+    - Decorated with **`@staticmethod`**
+
+    ```python
+    class MathUtils:
+        @staticmethod
+        def is_prime(n): # Utility function
+            return n > 1 and all(n % i != 0 for i in range(2, int(n**0.5) + 1))
+    ```
+
+**Real World Examples**  
+Django Model (Normal Methods)
+```python
+class Post(models.Model):
+    #... fields
+    email = models.EmailField()
+
+    def send_confirmation_email(self): # Normal Method
+        # Accesses instance data (self.email)
+        send_mail('Subject', 'Message', from_email, [self.email])
+```
+
+datetime (Class Methods)
+```python
+from datetime import datetime
+
+# fromtimestamp is a class method that acts as a factory
+now = datetime.now() # Creates a datetime instance
+parsed = datetime.fromtimestamp(1672531200) # Class Method
+```
+
+pathlib (Static Methods)
+```python
+from pathlib import Path
+
+class Path:
+    # ...
+    @staticmethod
+    def cwd(): # Static method -- doesn't need instance
+        # Returns the current working directory as a Path object
+        return os.getcwd()
+```
+
+- **Mental Model**
+    - **Normal method:** "Do something WITH this specific object."
+    - **Class method:** "Create or access something ABOUT the class itself."
+    - **Static method:** "Utility functions that BELONG with this class conceptually."
+
+Use normal methods for 90% of the time. Use class methods for alternative constructors or class-level operations. Use static methods for utilities that logically belong with the class but don't need class/instance data.
