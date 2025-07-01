@@ -1193,6 +1193,21 @@ Prevention Best Practices
 
 **Key Principle:** In concurrent systems, never assume data remains unchanged between separate operations. Always use atomic operations or proper locking mechanisms.
 
+⚙️ One DB per service vs one DB for many service  
+- **One database per service** when:
+    - Services have distinct, isolated data needs.
+    - We require independent scalability, technology choices (e.g., NoSQL for one, relational for another), and deployment for each service's data.
+    - Data ownership is clear and strictly encapsulated within a single service.
+    - This aligns with a **microservices architecture**.
+    - **Industry Example:** An e-commerce platform where the `Order Service` has its own database (e.g., PostgreSQL) for order details, and the `Product Catalog Service` has its own database (e.g., MongoDB) for product information. Each service can evolve and scale its data store independently.
+
+ - **One database for many services** when:
+    - Services share a highly cohesive and interdependent data model.
+    - Data consistency across services is paramount and difficult to achieve with distributed transactions.
+    - Simplicity of initial setup and management is a higher priority than extreme independent scalability.
+    - This is common in a **monolithic or tightly coupled service-oriented architecture**.
+    - **Industry Example:** A traditional enterprise resource planning (ERP) system where `Inventory`, `Purchasing`, and `Sales` modules all share a single relational database. Changes in one module directly impact the others through shared tables and relationships within that central database.
+
 ---
 
 ## Microservice patterns
