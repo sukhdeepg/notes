@@ -1208,6 +1208,74 @@ Prevention Best Practices
     - This is common in a **monolithic or tightly coupled service-oriented architecture**.
     - **Industry Example:** A traditional enterprise resource planning (ERP) system where `Inventory`, `Purchasing`, and `Sales` modules all share a single relational database. Changes in one module directly impact the others through shared tables and relationships within that central database.
 
+⚙️ MySQL Isolation Levels  
+Isolation levels control what a transaction can see when other transactions are running simultaneously. Think of it as setting privacy settings for the data a transaction can access from other, unfinished transactions.
+
+### The Four Isolation Levels (Weakest to Strongest)
+
+#### 1. READ UNCOMMITTED
+**What it allows:** See uncommitted changes from other transactions.
+```sql
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+-- Transaction 1 sees data from Transaction 2 even before Transaction 2 commits.
+```
+**Problem:** Dirty reads - we might get data that gets rolled back.
+**Use case:** Rarely used, only for approximate counts where accuracy isn't critical.
+
+#### 2. READ COMMITTED
+**What it allows:** Only see committed changes from other transactions.
+```sql
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+-- Transaction 1 only sees data after Transaction 2 commits.
+```
+**Problem:** Non-repeatable reads - same query can return different results within one transaction.
+**Example:** We read a balance twice in our transaction, but another transaction commits a change between our reads.
+
+#### 3. REPEATABLE READ (MySQL Default)
+**What it allows:** Same query always returns same results within a transaction.
+```sql
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+-- If we read data at start of transaction, we'll see same data throughout.
+```
+
+**Problem:** Phantom reads - new rows might appear in range queries.
+**Example:** `COUNT(*)` might change if another transaction inserts new rows.
+
+#### 4. SERIALIZABLE (Strongest)
+**What it allows:** Complete isolation - transactions run as if they're sequential.
+```sql
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+-- No concurrency issues, but slowest performance.
+```
+**Problem:** Lowest performance due to heavy locking.
+**Use case:** Critical operations where data consistency is more important than speed.
+
+#### Real-World Example
+
+**Scenario:** Two people checking and updating the same bank account.
+```sql
+-- Person A
+BEGIN TRANSACTION;
+SELECT balance FROM accounts WHERE id = 1; -- shows $1000
+-- Person B updates balance to $500 and commits
+SELECT balance FROM accounts WHERE id = 1; -- what do we see?
+COMMIT;
+```
+
+- Results by Isolation Level
+    - **READ UNCOMMITTED:** Might see `$500` even before Person B commits.
+    - **READ COMMITTED:** First read shows `$1000`, second shows `$500`.
+    - **REPEATABLE READ:** Both reads show `$1000` (snapshot from start of transaction).
+    - **SERIALIZABLE:** Person A waits until Person B finishes.
+
+- Key Points
+    - **SERIALIZABLE** is the safest but has low performance.
+    - **MySQL default (REPEATABLE READ)** prevents most common problems.
+    - **READ COMMITTED** is popular in high-concurrency applications.
+    - **READ UNCOMMITTED** is rarely used due to data integrity risks.
+    - Most applications stick with the default unless they have specific requirements.
+    - The key tradeoff is always **consistency vs concurrency** - stronger isolation gives you cleaner data but allows fewer simultaneous operations.
+
 ---
 
 ## Microservice patterns
