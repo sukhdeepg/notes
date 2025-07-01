@@ -21,6 +21,126 @@ When we make this request, it creates a "follower" relationship between the auth
 
 The empty body suggests no additional data is needed - the authentication token identifies who is following, and the URL parameter identifies who is being followed.
 
+⚙️ Pagination offset and cursor based
+```javascript
+// api/users.js
+app.get('/users', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = 10;
+  const offset = (page - 1) * limit;
+
+  const { rows } = await pool.query(
+    'SELECT * FROM users ORDER BY id LIMIT $1 OFFSET $2',
+    [limit, offset]
+  );
+  res.json(rows);
+});
+```
+
+```sql
+SELECT * FROM users ORDER BY id LIMIT 10 OFFSET 500000;
+```
+
+**Real-world impact**: If we have 1,000,000 pages of 10 items each, loading page 50,000 could scan and sort records for page 1 before it gets to page 50,000.
+
+**Pros**: Simple, supports jumping to specific pages.
+**Cons**: Performance degrades with large offsets, inconsistent results during data changes.
+
+Cursor-Based Pagination
+```javascript
+// api/users.js
+app.get('/users', async (req, res) => {
+    const cursor = req.query.cursor || null;
+    const limit = 10;
+
+    let query;
+    let params;
+
+    if (cursor) {
+        query = 'SELECT * FROM users WHERE id > $1 ORDER BY id LIMIT $2';
+        params = [cursor, limit];
+    } else {
+        query = 'SELECT * FROM users ORDER BY id LIMIT $1';
+        params = [limit];
+    }
+
+    const { rows } = await pool.query(query, params);
+    const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
+
+    res.json({
+        data: rows,
+        nextCursor,
+    });
+});
+```
+
+**How Cursor-Based Pagination Works**
+
+The key is using a unique, sequential column (like `id` or `created_at`) as a "cursor". Instead of "skip N rows", the query becomes "get rows after this specific value".
+
+```sql
+-- First page
+SELECT * FROM users ORDER BY id LIMIT 10;
+
+-- Let's say the last user ID from the first page was 10
+-- Next page
+SELECT * FROM users WHERE id > 10 ORDER BY id LIMIT 10;
+```
+
+**Implementation Steps:**
+- **Initial Request**: Client requests the first page without a cursor.
+- **Server Response**: Server fetches the first `N` items. It includes the data and a `nextCursor`, which is the value of the cursor column (e.g., `id`) of the last item.
+- **Subsequent Requests**: For the next page, the client sends the `nextCursor` it received.
+- **Server Query**: The server uses this cursor in the `WHERE` clause to fetch items that come after that cursor value.
+- **End of Data**: If the number of items returned is less than the limit, or if no items are returned, the server sends a `null` or empty `nextCursor`, signaling the end.
+
+```javascript
+// api/posts.js
+
+// GET /posts?cursor=...
+// ... (imports and setup)
+
+app.get('/posts', async (req, res) => {
+  const limit = 10;
+  const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
+
+  try {
+    const query = {
+      // Use a unique, sequential column for the cursor.
+      // Here we use `id`, but a timestamp like `created_at` is also common.
+      take: limit,
+      orderBy: {
+        id: 'asc', // Or 'desc', depending on our desired order
+      },
+      ...(cursor && {
+        // The `cursor` object tells Prisma where to start fetching.
+        cursor: {
+          id: cursor,
+        },
+        // `skip: 1` is crucial to avoid refetching the cursor item itself.
+        skip: 1,
+      }),
+    };
+
+    const posts = await prisma.post.findMany(query);
+
+    // The next cursor is the ID of the last item in the returned list.
+    const nextCursor = posts.length === limit ? posts[posts.length - 1].id : null;
+
+    res.json({
+      posts,
+      nextCursor,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+// Pros: Efficient, scalable, provides stable pagination even with frequent writes.
+// Cons: More complex to implement, doesn't allow jumping to a specific page.
+```
+
 ---
 
 ### Database Schema
