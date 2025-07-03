@@ -934,6 +934,25 @@ DEL "tag:performer:taylor-swift"
 
 The combination lets us say: "Delete everything related to Taylor Swift" without having to remember every single cache key - the tag set remembers them for us!
 
+⚙️ Inter-process vs Inter-thread Communication  
+**Inter-process communication (IPC)** means different programs/processes talking to each other. Processes are separate programs running independently with their own memory space.  
+
+**Inter-thread communication** means threads within the same program sharing data and coordinating. Threads are lightweight execution units within a single process that share memory.
+
+Real-world examples:  
+Inter-process:  
+- Web browser (one process) requests data from a database server (another process) over the network
+- A video game (one process) communicates with Steam client (another process) for achievements and friends list
+- Microservices architecture - payment service talks to inventory service via REST APIs
+
+Inter-thread:  
+- A web server handling multiple user requests simultaneously - each request runs on a different thread, but they might share a connection pool
+- Video editing software - one thread handles the UI, another processes video effects, another handles audio, all sharing the same video file data
+- Database systems - multiple threads handle different queries but coordinate access to shared data structures
+
+Key difference:  
+Inter-process is like different companies exchanging information through formal channels. Inter-thread is like different departments within the same company sharing resources and coordinating work.
+
 ---
 
 ## Database
