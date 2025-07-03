@@ -179,6 +179,138 @@ CREATE TABLE followers (
 
 ⚙️ [What happens when we type google.com in the browser?](https://bytebytego.com/guides/what-happens-when-you-type-google/)
 
+⚙️ Image upload flow with object store (s3) and CDN (CloudFront)  
+How browsers know about CDNs  
+The browser doesn't automatically "know" about CDNs. Here's what actually happens:
+
+**Our application tells the browser** - When our app serves HTML/CSS/JS, we specify the CDN URLs in our code. For example:
+```html
+<img src="https://cdn.example.com/images/profile.jpg">
+```
+
+**The browser just follows instructions** - It sees that URL and makes a request to wherever we told it to go (the CDN domain).
+
+**We choose the URLs** - As a developer, we decide whether to use:
+- Direct server URLs: `https://myserver.com/images/profile.jpg`
+- CDN URLs: `https://cdn.example.com/images/profile.jpg`
+
+**The flow is:**
+- Our backend uploads to S3
+- Our backend returns a CDN URL to our frontend (not the direct S3 URL)
+- Our frontend uses that CDN URL in the HTML
+- Browser requests from CDN
+- If CDN doesn't have it (cache miss), CDN fetches from S3
+
+**Key point:** The browser doesn't "discover" CDNs - we explicitly configure our application to use CDN URLs instead of direct server URLs. It's a conscious architectural choice we make when building our system.
+
+Example: User Profile Image Upload/Access  
+**Setup:**
+- S3 Bucket: `myapp-images`
+- CloudFront Distribution: `d1a2b3c4d5e6f7.cloudfront.net`
+- CloudFront Origin: `myapp-images.s3.amazonaws.com`
+
+Flow 1: Pre-signed URLs WITHOUT CDN  
+**Upload Flow:**
+- User clicks "Upload Profile Picture"
+- Frontend: `POST /api/get-upload-url`
+- Service generates pre-signed URL and returns:
+```
+https://myapp-images.s3.amazonaws.com/users/123/profile.jpg?AWSAccessKeyId=AKIAI...&Expires=1609459200&Signature=xyz...
+```
+- Frontend uploads directly to this S3 URL
+- Image stored in S3: `users/123/profile.jpg`
+
+**Access Flow:**
+- User views profile page
+- Service returns direct S3 URL:
+```
+https://myapp-images.s3.amazonaws.com/users/123/profile.jpg?AWSAccessKeyId=AKIAI...&Expires=1609459200&Signature=abc...
+```
+- Browser fetches directly from S3
+
+Upload/Update Flow:  
+- User -\> uploads image via our application
+- Service -\> receives image, processes if needed (resize, validation, etc.)
+- Service -\> uploads image to S3 with new/updated key
+- Service -\> triggers CDN invalidation (via CDN API) for the specific image path
+- Service -\> returns success response to user with new image URL
+
+**How new image gets added to CDN:**
+- User/Browser -\> requests the new image URL: `GET https://cdn.example.com/images/profile.jpg`
+- CDN -\> cache miss, makes HTTP request to S3: `GET https://mybucket.s3.amazonaws.com/images/profile.jpg`
+- S3 -\> checks if object exists at that exact key path (`images/profile.jpg`)
+- S3 -\> if exists: returns image data + metadata; if not: returns 404 error
+- CDN -\> caches the response (image or 404) and serves it to user
+- Subsequent requests -\> served directly from CDN cache
+
+**Cache-busting explained:** Problem: Image updated but CDN still serves old cached version
+
+**Solution 1 - Timestamp in filename:**
+- Old: `profile.jpg`
+- New: `profile-1698765432.jpg` (different filename = different URL = no cache conflict)
+
+**Solution 2 - Query parameter:**
+- Old: `profile.jpg?v=1`
+- New: `profile.jpg?v=2` (different URL = bypasses cache)
+
+Cache-busting works because each update creates a completely new URL that the CDN has never seen before.
+
+CloudFront doesn't automatically discover S3 - we configure it:
+
+**We manually set up the connection:** When we create a CloudFront distribution, we explicitly tell it:
+- "Hey CloudFront, our origin is this specific S3 bucket: `mybucket.s3.amazonaws.com`"
+- We configure this in the CloudFront console/API
+
+**CloudFront configuration example:**
+```
+Origin Domain: mybucket.s3.amazonaws.com
+Origin Path: /images (optional)
+```
+**The flow becomes:**
+- User requests: `https://d1234.cloudfront.net/profile.jpg`
+- CloudFront checks its cache - cache miss\!
+- CloudFront thinks: "My configured origin is `mybucket.s3.amazonaws.com`"
+- CloudFront makes request: `https://mybucket.s3.amazonaws.com/profile.jpg`
+- S3 returns the image
+- CloudFront caches it and serves to user
+
+**Key insight:** CloudFront is essentially a "smart proxy" that we configure to point to our S3 bucket. It's not automatic discovery - it's explicit configuration.
+
+**We set up three things:**
+
+1.  S3 bucket (our storage)
+2.  CloudFront distribution (our CDN)
+3.  The connection between them (origin configuration)
+
+Think of it like telling a delivery service: "When someone asks us for something, go check warehouse \#5 on Main Street."
+
+Flow 2: Pre-signed URLs WITH CDN
+**Upload Flow:**
+- User clicks "Upload Profile Picture"
+- Frontend: `POST /api/get-upload-url`
+- Service returns **same S3 pre-signed URL** (upload always goes to S3):
+```
+https://myapp-images.s3.amazonaws.com/users/123/profile.jpg?AWSAccessKeyId=AKIAI...&Expires=1609459200&Signature=xyz...
+```
+- Frontend uploads directly to S3
+- Image stored in S3, **CDN cache is empty**
+
+**Access Flow (First Request):**
+- User views profile page
+- Service returns **CDN URL with signed parameters:**
+```
+https://d1a2b3c4d5e6f7.cloudfront.net/users/123/profile.jpg?AWSAccessKeyId=AKIAI...&Expires=1609459200&Signature=abc...
+```
+- Browser requests from CloudFront
+- **CloudFront cache miss** -\> CloudFront fetches from S3
+- **Image now cached in CloudFront**
+- CloudFront serves to browser
+
+**Subsequent Requests:**  
+Same CDN URL served from CloudFront cache (fast\!)
+
+**Key:** Upload path identical, access path uses CDN domain instead of S3 domain.
+
 ---
 
 ## Architecture
