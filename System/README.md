@@ -1301,6 +1301,121 @@ Optimistic Locking: Version column prevents stale updates ✓
 
 MVCC solves read consistency but **isolation levels + locking prevent lost updates** by ensuring writes use current data, not snapshot data.  
 
+⚙️ Database locks  
+Locks are mechanisms that prevent conflicts when multiple transactions try to access the same data simultaneously. Think of them like reservation systems - they ensure only authorized transactions can modify data at specific times.
+
+Types of Locks  
+- Shared Lock (S Lock) - Read Lock
+    - **Purpose:** Multiple transactions can read, but none can write.
+    ```sql
+    SELECT * FROM accounts WHERE id = 1 LOCK IN SHARE MODE;
+    -- Multiple transactions can read this record
+    -- but no one can modify it
+    ```
+
+    - **Analogy:** Like a library book: many people can read it, but no one can edit it.
+
+- Exclusive Lock (X Lock) - Write Lock
+    - **Purpose:** Only one transaction can read or write.
+    ```sql
+    SELECT * FROM accounts WHERE id = 1 FOR UPDATE;
+    -- Only this transaction can access this row
+    -- All other transactions must wait
+    ```
+
+    - **Analogy:** Like editing a document: only one person can make changes at a time.
+
+Lock Granularity (Scope)  
+- Row-Level Locks
+    - **What:** Locks individual rows.
+    ```sql
+    -- 
+    UPDATE accounts SET balance = 500 WHERE id = 1;
+    -- Only row with id=1 is locked
+    ```
+
+    - Advantages:
+        - High concurrency - other transactions can work on different rows
+        - Faster than table-level locks
+
+- Table-Level Locks
+    - **What:** Locks entire table.
+    ```sql
+    LOCK TABLES accounts WRITE;
+    -- Entire table is locked
+    -- No other transaction can access any row
+    UNLOCK TABLES;
+    ```
+    - Advantages:
+        - Simple, low overhead
+    - Disadvantages:
+        - Poor concurrency (Used by: MyISAM)
+
+How Locks Work Automatically  
+During SELECT (Read Operations)
+```sql
+-- Normal SELECT (no explicit lock)
+SELECT balance FROM accounts WHERE id = 1;
+-- InnoDB uses MVCC for consistent reads
+```
+
+During UPDATE/DELETE/INSERT (Write Operations)
+```sql
+-- UPDATE automatically gets exclusive lock
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+-- Row is locked until transaction commits
+-- Other transactions wait
+```
+
+Deadlock Example
+**The Problem:** Two transactions waiting for each other.
+```sql
+-- Transaction A:
+UPDATE accounts SET balance = balance - 50 WHERE id = 1;
+UPDATE accounts SET balance = balance + 50 WHERE id = 2;
+
+-- Transaction B:
+UPDATE accounts SET balance = balance - 30 WHERE id = 2;
+UPDATE accounts SET balance = balance + 30 WHERE id = 1;
+```
+
+**MVCC's Solution:** Automatically detects deadlocks and rolls back transactions.
+
+Lock Modes in Practice  
+Optimistic Locking (Application Level)
+```sql
+-- Read with version
+SELECT balance, version FROM accounts WHERE id = 1;
+
+-- Update with version check
+UPDATE accounts SET balance = 450, version = version + 1 
+WHERE id = 1 AND version = 5;
+```
+
+Pessimistic Locking (Database Level)
+```sql
+-- Lock immediately
+SELECT balance FROM accounts WHERE id = 1 FOR UPDATE;
+-- Process business logic
+UPDATE accounts SET balance = 450 WHERE id = 1;
+```
+
+Key Points  
+- **Shared locks allow multiple** readers but NO writers (read-only LOCK statements)
+- **Locks on biggest granularity:** row locks have fewer conflicts than table locks
+- **Atomic transactions:** Every lock conflict causes deadlock
+- **Deadlock resolution:** Database picks a victim to rollback and retry automatically
+- **FOR UPDATE clause:** used when we need to read data we plan to modify
+- **MVCC handles deadlock detection and resolution automatically**
+
+Performance Tips
+- Keep transactions short to minimize lock duration
+- Access resources in consistent order across transactions
+- Use appropriate isolation levels - don't use SERIALIZABLE unless necessary
+- Consider optimistic locking for web applications with infrequent conflicts
+
+The key principle: **Locks ensure data consistency but can hurt performance if held too long or acquired in conflicting patterns.**
+
 ---
 
 ## Microservice patterns
