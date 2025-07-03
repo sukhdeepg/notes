@@ -934,29 +934,6 @@ DEL "tag:performer:taylor-swift"
 
 The combination lets us say: "Delete everything related to Taylor Swift" without having to remember every single cache key - the tag set remembers them for us!
 
-⚙️ MVCC  
-**Mental Model**
-MVCC creates snapshots for reads, but writes can still conflict
-- Reads see consistent data from transaction start
-- Writes need current data to avoid overwriting newer changes
-- Problem: Read-then-write operations using stale snapshot data
-
-**Lost Update Scenario**  
-Initial: Stock = 100
-
-TxA: Reads 100, plans Stock = 90 (100-10)  
-TxB: Updates Stock = 95 (100-5), commits  
-TxA: Tries UPDATE Stock = 90 $\leftarrow$ OVERWRITES TxB's change!  
-
-**Solutions by Isolation Level**  
-READ COMMITTED: TxA re-reads current value (95), calculates 95-10=85 ✓  
-REPEATABLE READ: TxA blocks or gets current row for UPDATE ✓  
-SERIALIZABLE: TxA fails/retries due to phantom read detection ✓  
-Optimistic Locking: Version column prevents stale updates ✓  
-
-**Key Insight**  
-MVCC solves read consistency but **isolation levels + locking prevent lost updates** by ensuring writes use current data, not snapshot data.
-
 ---
 
 ## Database
@@ -1298,6 +1275,31 @@ COMMIT;
     - **READ UNCOMMITTED** is rarely used due to data integrity risks.
     - Most applications stick with the default unless they have specific requirements.
     - The key tradeoff is always **consistency vs concurrency** - stronger isolation gives you cleaner data but allows fewer simultaneous operations.
+
+⚙️ MVCC?  
+MVCC creates snapshots for reads, but writes can still conflict
+- Reads see consistent data from transaction start
+- Writes need current data to avoid overwriting newer changes
+- Problem: Read-then-write operations using stale snapshot data
+
+**Lost Update Scenario**
+
+Initial: Stock = 100
+
+TxA: Reads 100, plans Stock = 90 (100-10)
+TxB: Updates Stock = 95 (100-5), commits
+TxA: Tries UPDATE Stock = 90 $\leftarrow$ OVERWRITES TxB's change!
+
+**Solutions by Isolation Level**
+
+READ COMMITTED: TxA re-reads current value (95), calculates 95-10=85 ✓
+REPEATABLE READ: TxA blocks or gets current row for UPDATE ✓
+SERIALIZABLE: TxA fails/retries due to phantom read detection ✓
+Optimistic Locking: Version column prevents stale updates ✓
+
+**Key Insight**
+
+MVCC solves read consistency but **isolation levels + locking prevent lost updates** by ensuring writes use current data, not snapshot data.  
 
 ---
 
