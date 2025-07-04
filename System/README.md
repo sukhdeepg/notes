@@ -1085,6 +1085,34 @@ Inter-thread:
 Key difference:  
 Inter-process is like different companies exchanging information through formal channels. Inter-thread is like different departments within the same company sharing resources and coordinating work.
 
+⚙️ Exactly-once processing with a queue + Redis  
+**At-Least-Once Delivery** from the Queue Guarantees we may see duplicates → consumer must handle retries.
+
+Unique Message ID (Idempotency Key)  
+Every message gets a UUID or hash; stored in Redis so duplicates are detected before reprocessing.
+
+Atomic Check-and-Set in Redis  
+Use `SETNX` or a Lua script to claim "first processor" and save result/state with a TTL.
+
+Distributed Lock (Redlock)  
+Acquire the same lock key across N Redis masters (majority wins) to prevent race-conditions under high concurrency.
+
+Process → Record → Acknowledge  
+- Fetch message (visibility timeout starts)
+- Acquire lock + check idempotency key
+- If new, do work and write back result in Redis
+- Release lock and ACK the queue
+- If duplicate or lock fails, skip or retry later.
+
+TTL Cleanup  
+Idempotency keys expire after our safe-replay window to bound Redis storage.
+
+Architecture Flow
+```
+[Producer] -> [Queue] -> Consumer -> [Redis: SETNX id:<msgID> + Redlock] - Process & store result - Release lock + ACK
+```
+
+Marry at-least-once delivery with Redis-backed idempotency keys and distributed locks to achieve "effectively exactly-once" message processing.
 ---
 
 ## Database
