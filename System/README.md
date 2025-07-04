@@ -1127,6 +1127,156 @@ Message deduplication
 Atomic coordination
 - Employ a transactional messaging system (e.g. Apache Kafka's transactional producer API: `initTransactions()`, `beginTransaction()`, `commitTransaction()`) so writes and offset commits occur as one atomic operation.
 
+⚙️ Elastic search multi-layer caching   
+Key Concepts
+- **Document:** One record (e.g. a restaurant with fields like name, location, price, rating).
+- **Index:** The full set of our documents (like a database table).
+- **Shard:** A slice of that index. A shard holds only a subset of documents.
+- **Lucene:** The search engine library under the hood, which builds inverted indexes, bitsets, and scores.
+
+We'll use Shard 0 with 8 documents (IDs 1–8) as our running example:
+
+| ID | Name | Location | Price | Rating |
+|----|------|----------|-------|--------|
+| 1 | Mario's Pizza | NYC | 15 | 4.5 |
+| 2 | Luigi's Pizzeria | NYC | 22 | 4.2 |
+| 3 | Bella's Burgers | LA | 12 | 4.0 |
+| 4 | Tony's Tacos | NYC | 9 | 4.8 |
+| 5 | Panda Express | LA | 11 | 3.9 |
+| 6 | Sushi World | NYC | 30 | 4.6 |
+| 7 | Curry House | NYC | 18 | 4.3 |
+| 8 | Burger King | LA | 8 | 3.5 |
+
+Cache Layers Overview  
+| Layer | What It Stores | Where | When It's Hit |
+|-------|----------------|-------|---------------|
+| 1. Request Cache | Entire search response (hits + aggs) | Coordinating node's memory | If we `request_cache: true` and run the same query |
+| 2. Query (Filter) Cache | Boolean filter bitsets | Each shard's JVM heap | On any filter clause we mark cacheable |
+| 3. Scoring | — | Each shard (computed afresh) | On the filtered docs, every time |
+| 4. Doc Values / Field Data | Field values for sorting/aggs (e.g. price, rating) | On-disk via OS file cache | When we sort or aggregate on a field |
+| 5. OS File System Cache | Lucene's on-disk index files (postings, doc values) | Operating system RAM cache | Always: speeds up disk reads |
+
+Step-by-Step Flow with Examples  
+A. User Sends Search Request
+
+```json
+GET /restaurants/_search
+{
+  "query": {
+    "bool": {
+      "must": { "match": { "cuisine": "Italian" } },
+      "filter": [
+        { "term": { "location": "NYC" } },
+        { "range": { "price": { "lt": 20 } } }
+      ]
+    }
+  },
+  "request_cache": true
+}
+```
+
+B. Request Cache Check (Coordination Node)  
+**Hit?** Has this exact JSON run before with caching enabled?
+    - **Yes** → return stored response in ~1ms (skip shards).
+    - **No** → forward to all shards.
+
+*Example: First run ⇒ miss. Second run ⇒ hit, returns same JSON with top hits and aggs.*
+
+C. Shard-Level Execution (Shard 0)  
+Boolean Filters → Query (Filter) Cache  
+- **Filter:** `location:NYC`
+    - **Cache miss on first run** → scan docs1–8 → build bitset (1=match, 0=no):
+  
+    ```csharp
+    [1,1,0,1,0,1,1,0]  // IDs 1,2,4,6,7 are in NYC
+    ```
+  - **Store this bitset under key** `term:location=NYC`.
+- **Filter:** `price<20`
+    - **Cache miss** → scan docs → bitset:
+  
+    ```csharp
+    [1,0,1,1,1,0,1,1]  // IDs 1,3,4,5,7,8 are under $20
+    ```
+    - **Store under key** `range:price<20`.
+
+- **Combine with bitwise AND:**
+    ```csharp
+    [1,1,0,1,0,1,1,0]
+    AND
+    [1,0,1,1,1,0,1,1]
+    =
+    [1,0,0,1,0,0,1,0]
+    → Matching Doc IDs [1,4,7]
+    ```
+
+**Subsequent run (e.g. "Chinese in NYC under 20"):**
+Both bitsets are **cache hits**, so ES skips scanning and ANDs instantly.
+
+Scoring Clause → Fresh Calculation
+- **On the filtered docs [1,4,7], run full-text scoring (e.g. BM25):**
+| ID | Name | Score |
+|----|------|-------|
+| 1 | Mario's Pizza | 12.4 |
+| 7 | Curry House | 11.9 |
+| 4 | Tony's Tacos | 10.1 |
+
+- **Never cached**, ensuring up-to-date relevance.
+
+Sorting / Aggregations → Doc Values & OS Cache
+- **Doc Values** store each field column (price, rating) on disk.
+- **OS file cache** keeps recently accessed columns in RAM.
+
+*Example: We request* `sort: rating desc` *and an aggregation* `avg(price)`.
+- **"ES reads rating values [4.5, 4.8, 4.3] from doc values via OS cache."**
+- **"Calculates average price:** `(15 + 9 + 18) / 3 = 14.0`**"
+
+D. Merge Shard Results (Coordination Node)
+- **Collect each shard's top-N scored docs + agg buckets.**
+- **Merge, re-rank by score, apply pagination.**
+
+*Example final top-3 (global) might still be docs 1,7,4 if other shards have lower scores.*
+
+E. Store in Request Cache
+- **Because** `"request_cache": true`, save the entire merged JSON under a key derived from the request body.
+- **Next identical request bypasses everything except this quick lookup.**
+
+F. Return Final Response
+```json
+{
+  "hits": {
+    "total": 3,
+    "hits": [
+      { "_id": 1, "_score": 12.4, "_source": { … } },
+      { "_id": 7, "_score": 11.9, "_source": { … } },
+      { "_id": 4, "_score": 10.1, "_source": { … } }
+    ]
+  },
+  "aggregations": {
+    "avg_price": { "value": 14.0 }
+  }
+}
+```
+
+Memory Layout Example (16 GB Server)
+```pgsql
+Total RAM: 16 GB
+├─ JVM Heap (8 GB)
+│  ├─ Query (Filter) Cache        0.8 GB  (10%)
+│  ├─ Field Data / Doc Values     3.2 GB  (40%)
+│  ├─ Request Cache               0.08 GB (1%)
+│  └─ Other ES Operations         3.92 GB (49%)
+└─ OS & File Cache (8 GB)
+   ├─ File System Cache (Lucene)  7.2 GB  (90%)
+   └─ Other OS Processes          0.8 GB  (10%)
+```
+
+Quick Recap of Hit Order
+- **Request Cache** → full-response replay
+- **Query (Filter) Cache** → boolean bitsets (AND to filter)
+- **Scoring** → fresh relevance scores
+- **Doc Values + OS Cache** → fast field lookups for sorting/aggs
+- **Request Cache Store** → save full JSON
+
 ---
 
 ## Database
