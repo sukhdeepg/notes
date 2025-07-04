@@ -1954,6 +1954,30 @@ Prevents resource exhaustion in one area from bringing down the entire system.
     - Are you alive?
     - Are you ready to serve traffic? A service might be alive but not ready to serve traffic e.g. still initializing, loading data, warming up caches, connecting to database)
 
+⚙️ Event sourcing pattern    
+Imagine we're only allowed to write down things that happen, never erase **Event Sourcing** means storing the history of all changes (events) to our data, rather than just its current state. To find out the current state, we simply "replay" this history.
+- **Events are facts:** "Account Created," "Deposited $100," "Item Added to Cart."
+- **State is derived:** The current account balance or cart content is found by applying all its past events.
+
+Benefits:
+- **Full Audit Trail:** Complete history of changes for debugging and auditing.
+- **Temporal Queries:** Reconstruct state at any past point in time.
+- **Decoupling:** Events can trigger actions in other system parts.
+
+Drawbacks:
+- **Learning Curve:** Different programming model.
+- **Querying Complexity:** Directly querying events for current state can be slow; often needs CQRS (separate read models).
+
+Aggregates  
+An **Aggregate** is a cluster of domain objects (entities and value objects) that can be treated as a single unit, ensuring consistency for operations performed on it.  
+**Example:** A `ShoppingCart` (the aggregate root) along with its `LineItem` objects forms an aggregate, and we always save or load the entire `ShoppingCart` with all its items to ensure its rules (like total price) are consistent.
+
+Brief Industry Example: Banking Transaction  
+A bank account's transaction history is a natural fit for Event Sourcing.
+- **Events:** `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `FeeApplied`.
+- **State:** The current balance is derived by replaying these transaction events.
+- **Benefit:** Perfect auditability and ability to reconstruct balance at any point in time (e.g., for statements).
+
 ---
 
 ## Language specific
