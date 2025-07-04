@@ -2056,3 +2056,55 @@ class Path:
     - **Static method:** "Utility functions that BELONG with this class conceptually."
 
 Use normal methods for 90% of the time. Use class methods for alternative constructors or class-level operations. Use static methods for utilities that logically belong with the class but don't need class/instance data.
+
+⚙️ generator and yield in Python  
+A **generator** is a special type of function that returns values one at a time using the `yield` keyword instead of `return`. It pauses execution and resumes where it left off.
+
+Key differences:
+- Regular function uses `return` (exits completely)
+- Generator uses `yield` (pauses and can continue)
+
+Basic example:
+```python
+def simple_generator():
+    yield 1
+    yield 2
+    yield 3
+
+# Using the generator
+gen = simple_generator()
+print(next(gen))  # 1
+print(next(gen))  # 2
+print(next(gen))  # 3
+```
+
+Why use generators?  
+- **Memory efficient:** Generate values on-demand instead of storing all in memory.
+- **Lazy evaluation:** Only compute when needed.
+
+```python
+# Memory-efficient way to generate large sequences
+def big_numbers():
+    for i in range(1000000):
+        yield i * i
+
+# Only generates values as we iterate
+for square in big_numbers():
+    if square > 100:
+        break
+    print(square)
+```
+
+Generators are perfect for processing large datasets or infinite sequences without consuming excessive memory.
+
+Practical example:
+```python
+def countdown(n):
+    while n > 0:
+        yield n
+        n -= 1
+
+# Usage
+for num in countdown(5):
+    print(num)  # Prints: 5, 4, 3, 2, 1
+```
