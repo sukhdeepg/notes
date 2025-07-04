@@ -1800,6 +1800,42 @@ Performance Tips
 
 The key principle: **Locks ensure data consistency but can hurt performance if held too long or acquired in conflicting patterns.**
 
+⚙️ Clustered and non-clustered indexes
+Think of MySQL's indexes as a **multi-level filing system** that lives partly on disk (as **pages**) and partly in RAM (the **buffer pool**), organized as a **B+Tree** for fast lookup.
+
+How InnoDB Processes a Query  
+When we run a query, InnoDB follows this process:  
+- **Checks the buffer pool** for the tree pages it needs
+- **Traverses the B+Tree** from **root → internal nodes → leaf** to find our key
+- If the page isn't in RAM, **loads it from disk** into the buffer pool
+- At a **clustered index** leaf, it reads the full row; at a **secondary index** leaf, it reads the key + primary-key pointer, then does a second lookup in the clustered tree to fetch the row
+
+Key Components  
+- B+Tree Structure
+    - **Root Node**: Entry point, always in the buffer pool once accessed
+    - **Internal Nodes**: Guide searches by key ranges
+    - **Leaf Nodes**: Contain either full rows (clustered) or index entries + primary-key pointers (secondary)
+- Data Pages
+    - **Definition**: Fixed-size blocks (default **16 KB**) that store index records or rows
+    - **Layout**: Header → data area (records) → directory & free space. Free space (~1/16th) allows in-page inserts without splitting
+- Buffer Pool
+    - **Purpose**: Caches pages in RAM to avoid disk I/O
+    - **Behavior**: Uses an LRU algorithm split into "young" and "old" lists to track hot pages
+
+- Clustered vs. Secondary Index
+    - **Clustered Index (Primary Key)**: The table itself is stored in primary-key order. **Leaf pages = full rows**
+    - **Secondary Index (Non-Clustered)**: Leaf pages store only `<indexed_columns, primary_key>` pairs. A lookup here yields the primary key, which is used to fetch the full row from the clustered tree
+
+Step-by-Step Flow  
+- **Query Issued** - Client issues `SELECT ... WHERE col = X`. InnoDB decides to use an index
+- **Check Buffer Pool** - InnoDB looks for the **root page** of the B+Tree in RAM
+- **Disk Fetch If Needed** - If the page isn't cached, it's read from the `.ibd` file on disk into the buffer pool
+- **Traverse Internal Nodes** - Read key arrays in internal pages to pick the right branch. Repeat until a leaf node is reached
+- **Leaf Lookup**:
+    - **Clustered**: Binary search the leaf page for `X`, then **return the row**
+    - **Secondary**: Find `<X, PK>` in the leaf, then do a **second B+Tree search** in the clustered index to fetch the row
+- **Return Data** - The row is sent back to the client. If pages were dirty (modified), they'll be flushed to disk later, but we've already got our result
+
 ---
 
 ## Microservice patterns
