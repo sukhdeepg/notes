@@ -1290,6 +1290,22 @@ Quick Recap of Hit Order
     - Two-phase commit
     - Single source of truth with eventual consistency
 
+⚙️ Docker and Kubernetes  
+Docker:
+- Containerization platform that packages our app + dependencies into a lightweight, portable container
+- Handles building, running, and managing individual containers on a single machine
+- Think: "How do I package and run my app consistently anywhere?"
+
+Kubernetes:  
+- Container orchestration system that manages clusters of machines running containers
+- Handles deployment, scaling, load balancing, service discovery, and self-healing across multiple nodes
+- Think: "How do I manage hundreds of containers across dozens of servers in production?"
+
+Key difference:  
+Docker gets our app running in a container. Kubernetes gets that container running reliably at scale across infrastructure.
+
+Docker is the engine, Kubernetes is the fleet management system.
+
 ---
 
 ## Database
