@@ -1113,6 +1113,20 @@ Architecture Flow
 ```
 
 Marry at-least-once delivery with Redis-backed idempotency keys and distributed locks to achieve "effectively exactly-once" message processing.
+
+⚙️ Exactly once message delivery  
+Idempotent consumers
+- Relational DB (PostgreSQL/MySQL PROCESSED_MESSAGES)
+    - Durable ACID store with a UNIQUE constraint on `MessageID`; simply `INSERT` and, on duplicate-key violation, drop the message. Guarantees consistency but has higher latency and storage overhead.
+- Redis
+    - In-memory key–value store using atomic `SET <key> <value> NX EX <ttl>` (or Lua scripts) to "insert if not exists," plus optional persistence (AOF/RDB) and clustering for scale; extremely low latency but requires TTL management to bound memory and may evict old entries.
+
+Message deduplication  
+- Use a FIFO queue with built-in deduplication (e.g. AWS SQS FIFO + MessageDeduplicationId or content-based dedupe). Retries with the same ID are dropped within the dedupe window.
+
+Atomic coordination
+- Employ a transactional messaging system (e.g. Apache Kafka's transactional producer API: `initTransactions()`, `beginTransaction()`, `commitTransaction()`) so writes and offset commits occur as one atomic operation.
+
 ---
 
 ## Database
