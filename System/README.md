@@ -1277,6 +1277,19 @@ Quick Recap of Hit Order
 - **Doc Values + OS Cache** → fast field lookups for sorting/aggs
 - **Request Cache Store** → save full JSON
 
+⚙️ Dual Write problem  
+- **Definition:** Writing the same data to two different systems/databases simultaneously, risking inconsistency if one write fails.
+- **Core Issue:** No atomic transaction across systems - partial success leaves data out of sync.
+- **Example:** E-commerce order:
+    - Write to Orders DB: ✅ Success
+    - Write to Inventory DB: ❌ Fails
+    - Result: Order exists but inventory not decremented
+- **Solutions:**
+    - Saga pattern (compensating transactions)
+    - Event sourcing
+    - Two-phase commit
+    - Single source of truth with eventual consistency
+
 ---
 
 ## Database
