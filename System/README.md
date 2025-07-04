@@ -1876,16 +1876,7 @@ Example
 
 If payment API becomes slow/unresponsive, it only exhausts its dedicated resources - inventory and user operations continue normally.
 
-⚙️ Health check pattern  
-- Dedicated endpoints (/health) that external services can periodically query.
-- Crucial for micro services and containerized environments where services can fail or become degraded independently.
-- Load balancers, API gateways, services meshes, orchestration platforms (Kubernetes, ECS), and dedicated monitoring tool (Prometheus, Nagios) are primary consumer of health checks.
-- State checks
-    - Are you alive?
-    - Are you ready to serve traffic? A service might be alive but not ready to serve traffic e.g. still initializing, loading data, warming up caches, connecting to database)
-
-## Python Example
-
+Python Example
 ```python
 from concurrent.futures import ThreadPoolExecutor
 
@@ -1912,6 +1903,14 @@ Prevents resource exhaustion in one area from bringing down the entire system.
 - Resource intensive: maintaining 2 full production grade environments.
 - Database schema change and data synchronization between blue and green can be complex especially with backward incompatible changes. Strategies like dual writing, schema evolution, or feature flags might be needed.
 - In canary, it’s gradual roll out to a subset of users. Here, it’s instantaneous switch.
+
+⚙️ Health check pattern  
+- Dedicated endpoints (/health) that external services can periodically query.
+- Crucial for micro services and containerized environments where services can fail or become degraded independently.
+- Load balancers, API gateways, services meshes, orchestration platforms (Kubernetes, ECS), and dedicated monitoring tool (Prometheus, Nagios) are primary consumer of health checks.
+- State checks
+    - Are you alive?
+    - Are you ready to serve traffic? A service might be alive but not ready to serve traffic e.g. still initializing, loading data, warming up caches, connecting to database)
 
 ---
 
