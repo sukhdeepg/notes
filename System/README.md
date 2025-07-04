@@ -2169,6 +2169,27 @@ A bank account's transaction history is a natural fit for Event Sourcing.
 - **State:** The current balance is derived by replaying these transaction events.
 - **Benefit:** Perfect auditability and ability to reconstruct balance at any point in time (e.g., for statements).
 
+⚙️ Distributed tracing pattern  
+The Distributed Tracing pattern is a crucial observability technique for understanding the end-to-end flow of requests through complex, distributed systems, especially those built with microservices. It works by assigning a **unique identifier** to a request at its inception and then **propagating this identifier** across all services and components involved in processing that request. This allows engineers to visualize the entire journey of a request, identify bottlenecks, troubleshoot errors, and understand dependencies across service boundaries.
+
+Points  
+- **Complex Distributed Systems:** This pattern is essential for environments where a single user action might trigger interactions across numerous microservices, databases, queues, and external APIs.
+- **End-to-End Visibility:** Distributed tracing provides a complete picture of a request's path from its origin (e.g., a user's browser) through every service it touches, until a response is returned.
+- **Trace:** A trace represents the complete, end-to-end journey of a single request or transaction through the distributed system. It's the entire story of a unit of work.
+- **Span:** A span is a named, timed operation that represents a logical unit of work within a trace. Each service call, database query, or internal function execution can be a span. Spans have a start time, end time, duration, and other metadata.
+- **Trace ID:** This is a unique identifier assigned to the initial request that gets propagated across all services. Every span within a single trace shares the same Trace ID.
+- **Span ID:** A unique identifier for each individual span.
+- **Improved Collaboration:** Provides a shared understanding across different teams (e.g., frontend, backend, database) responsible for different services.
+- **Proactive Issue Detection:** Can help identify issues before they impact users by monitoring trace anomalies.
+
+Contrast with Logs and Metrics
+- **Logs:** These record discrete events at a specific point in time within a single service. They tell us *what* happened.
+- **Metrics:** These aggregate numerical data over time (e.g., CPU usage, error rates). They tell us *how much* or *how often*.
+- **Traces:** These provide an end-to-end view of a single request's journey, showing *why* an event occurred by connecting related operations across services. They connect the "what" and "how much" across the entire system.
+
+Sampling  
+In high-volume systems, not every trace may be collected due to performance overhead. **Sampling strategies** (e.g., head-based, tail-based) are used to select a representative subset of traces for analysis.
+
 ---
 
 ## Language specific
