@@ -1876,6 +1876,14 @@ Example
 
 If payment API becomes slow/unresponsive, it only exhausts its dedicated resources - inventory and user operations continue normally.
 
+⚙️ Health check pattern  
+- Dedicated endpoints (/health) that external services can periodically query.
+- Crucial for micro services and containerized environments where services can fail or become degraded independently.
+- Load balancers, API gateways, services meshes, orchestration platforms (Kubernetes, ECS), and dedicated monitoring tool (Prometheus, Nagios) are primary consumer of health checks.
+- State checks
+    - Are you alive?
+    - Are you ready to serve traffic? A service might be alive but not ready to serve traffic e.g. still initializing, loading data, warming up caches, connecting to database)
+
 ## Python Example
 
 ```python
