@@ -1318,6 +1318,137 @@ Docker gets our app running in a container. Kubernetes gets that container runni
 
 Docker is the engine, Kubernetes is the fleet management system.
 
+⚙️ Change Data Capture  
+Real-time technique that captures database changes from transaction logs and streams them to downstream systems without impacting source database performance.
+
+How CDC Works  
+When data changes in our primary database (INSERT, UPDATE, DELETE), CDC captures these changes from the database's transaction log and streams them to downstream systems. This happens asynchronously, so our main application isn't affected.
+
+Core Architecture
+```
+[Application] → [Database] → [CDC Agent] → [Message Broker] → [Consumers]
+```
+
+Key Components
+- CDC Agent/Service:
+    - Standalone process/container separate from application
+    - Reads database transaction logs (not tables)
+    - Maintains persistent connections to DB and message broker
+    - Examples: Debezium connectors, AWS DMS, Maxwell
+
+- Database Transaction Logs:
+    - PostgreSQL: WAL + logical replication slots
+    - MySQL: Binary logs (binlog)
+    - MongoDB: Oplog
+    - Pulls data (not pushed by DB)
+
+- Message Broker:
+    - Kafka (most common), Kinesis, Event Hubs, Pub/Sub
+
+How It Works
+- App writes to database → transaction log updated
+- CDC agent reads log → converts to structured events
+- Events published to message broker
+- Multiple consumers process independently
+
+Deployment Models
+- **Self-Managed:** Kafka Connect cluster with Debezium connectors
+- **Cloud-Managed:** AWS DMS replication instances, Google Datastream
+- **Enterprise:** Confluent Platform, Striim
+
+Real-World Example  
+E-commerce: User profile update → PostgreSQL WAL → Debezium → Kafka → Multiple services (Search/Elasticsearch, Analytics, Notifications)
+
+Industry Tools
+- **Open Source:** Debezium, Maxwell, Kafka Connect
+- **Cloud:** AWS DMS, Google Datastream, Azure Data Factory
+- **Enterprise:** Confluent, Striim
+
+Key Benefits
+- Real-time data sync across microservices
+- No application code changes needed
+- Minimal database performance impact
+- Event-driven architecture enablement
+
+Message Format
+```json
+{
+  "before": {...}, "after": {...},
+  "op": "u", "ts_ms": 1634567890123,
+  "source": {"db": "users", "table": "profiles"}
+}
+```
+
+Database Transaction Log:
+- PostgreSQL: Write-Ahead Log (WAL) with logical replication slots
+- MySQL: Binary logs (binlog)
+- MongoDB: Oplog (operations log)
+- SQL Server: Transaction log with Change Tracking
+
+Message Broker:
+- Apache Kafka (most common)
+- AWS Kinesis
+- Azure Event Hubs
+- Google Pub/Sub
+
+How the CDC Agent Actually Works:
+- Database Connection: CDC agent establishes a dedicated connection to read transaction logs
+- Log Parsing: Continuously parses log entries and converts to structured events
+- State Management: Maintains checkpoint/offset of last processed log position
+- Event Publishing: Publishes change events to message broker topics
+- Error Handling: Handles connection failures, restarts from last checkpoint
+
+Real-World Scenario: E-commerce Platform  
+Consider an e-commerce platform with microservices architecture:
+
+Infrastructure Setup:
+- User Service: Node.js app + PostgreSQL (primary database)
+- CDC Layer: Debezium Connect cluster (3 nodes) + Kafka cluster
+- Search Service: Updates Elasticsearch index
+- Analytics Service: Writes to data warehouse
+
+Flow:
+- Customer updates profile → PostgreSQL transaction log updated
+- Debezium connector reads WAL → converts to JSON event
+- Event published to Kafka topic `user.profile.changes`
+- Multiple consumers process the event independently
+
+Technical Implementation Deep Dive
+
+Database-Specific Mechanisms:  
+
+PostgreSQL:
+- Creates logical replication slot: `SELECT pg_create_logical_replication_slot('debezium', 'pgoutput')`
+- CDC agent connects as replica and consumes WAL stream
+- No impact on primary database performance
+
+MySQL:
+- Enables binlog: `log-bin=mysql-bin`, `binlog-format=ROW`
+- CDC agent connects as replica server using MySQL replication protocol
+- Reads binary log events in real-time
+
+Message Format:
+```json
+{
+  "before": {"id": 123, "name": "John", "email": "john@old.com"},
+  "after": {"id": 123, "name": "John", "email": "john@new.com"},
+  "op": "u",
+  "ts_ms": 1634567890123,
+  "source": {"db": "users", "table": "profiles"}
+}
+```
+
+Industry Example - Uber: Uber uses CDC to sync rider/driver data across 50+ microservices. Their CDC infrastructure processes millions of database changes per second, updating real-time location services, pricing engines, and analytics systems without affecting their core ride-booking application performance.
+
+Complete Architecture:
+```
+[User Service] → [PostgreSQL] → [Debezium Connect Cluster] → [Kafka] → [Multiple Consumers]
+       ↓                ↓                    ↓
+[App Containers]  [Dedicated Nodes]  [Elasticsearch, Warehouse, etc.]
+```
+
+This architecture ensures data consistency across microservices while maintaining system performance and enabling real-time analytics and search capabilities through purpose-built infrastructure components.
+
 ---
 
 ## Database
