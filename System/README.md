@@ -1449,6 +1449,24 @@ Complete Architecture:
 
 This architecture ensures data consistency across microservices while maintaining system performance and enabling real-time analytics and search capabilities through purpose-built infrastructure components.
 
+⚙️ App to Kafka vs DB to Kafka  
+Event Sourcing Approaches: Manual vs CDC
+
+Approach Comparison
+| Approach | Pros | Cons |
+|----------|------|------|
+| **App→Kafka (manual emit)** | • Simple to understand and implement<br>• Event schema under app control | • Risk of "write DB but fail to publish" (or vice versa)<br>• We must build retry/idempotency logic<br>• Harder to guarantee exactly-once ordering between DB commit and event |
+| **DB→Kafka (CDC)** | • Guaranteed 1:1 mapping of committed rows to events<br>• Exactly-once (or "read-committed") delivery semantics<br>• Fully decouples our app from event plumbing | • Requires CDC tooling (Debezium, Maxwell, native connector)<br>• Slightly more infrastructure to operate<br>• Can introduce a small replication lag |
+
+Which to choose?
+- **For small-to-medium scale or prototypes → App→Kafka**
+    - We get up and running quickly, with minimal infra.
+
+- **For mission-critical, high-scale systems → CDC**
+    - We gain reliability, true event sourcing, and don't have to re-implement exactly-once guarantees in our service layer.
+
+Often teams start with app-level emits and migrate to CDC once they hit reliability or consistency pain points. 
+
 ---
 
 ## Database
