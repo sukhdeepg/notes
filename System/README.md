@@ -2408,6 +2408,22 @@ Important Points:
 
 **ephemeral meaning in the above context:** In this context, "ephemeral" means services are **temporary, short-lived, and can be easily created and destroyed** as needed, rather than being permanent.
 
+⚙️ Backend For Frontend (BFF)  
+**Mental Model:** Create a dedicated backend service for each frontend type (web, mobile, TV) that acts as a smart intermediary, aggregating and transforming data from multiple services into exactly what that specific frontend needs.
+
+Key Points:
+- **One BFF per frontend type** - Mobile BFF, Web BFF, TV BFF, etc.
+- **Data aggregation** - Makes multiple backend calls, combines responses into single optimized payload
+- **Frontend-specific optimization** - Returns data in exact format/structure needed by that client
+- **Reduces network calls** - Frontend makes 1 request instead of many
+- **Decouples frontend from backend evolution** - Changes in downstream services don't break frontends
+
+Example: 
+Netflix's mobile app needs user profile + recommendations + viewing history. Instead of the mobile app making 3 separate API calls, it calls its dedicated Mobile BFF once. The Mobile BFF fetches from UserService, RecommendationService, and HistoryService, then combines and formats the data specifically for mobile UI requirements before sending one optimized response back.
+
+vs Generic API:  
+Generic APIs serve all clients the same way, leading to over-fetching or under-fetching. BFFs solve this by tailoring responses per client type. 
+
 ---
 
 ## Language specific
