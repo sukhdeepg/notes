@@ -1,25 +1,6 @@
 ## WEB
 ⚙️ Working of PUT `/users/[id]/followers`
-
-### Method
-PUT (typically used for creating/updating relationships)
-
-### Path
-`/users/[id]/followers` where `[id]` is the user ID we want to follow
-
-### Body
-Empty JSON object `{}`
-
-### How it works
-When we make this request, it creates a "follower" relationship between the authenticated user (us) and the target user specified by `[id]`. The PUT method suggests this is idempotent - calling it multiple times has the same effect as calling it once.
-
-### Typical flow
-1. User clicks "Follow" button on another user's profile
-2. Frontend sends PUT request to this endpoint with target user's ID
-3. Backend creates follower relationship in database
-4. User is now following the target user
-
-The empty body suggests no additional data is needed - the authentication token identifies who is following, and the URL parameter identifies who is being followed.
+![image](https://github.com/user-attachments/assets/da6d3c4a-3464-47cc-8a49-7ace2f548441)
 
 ⚙️ Pagination offset and cursor based
 ```javascript
