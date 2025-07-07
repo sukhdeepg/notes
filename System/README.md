@@ -1450,6 +1450,297 @@ Which to choose?
 
 Often teams start with app-level emits and migrate to CDC once they hit reliability or consistency pain points. 
 
+⚙️ ClickHouse  
+ClickHouse is an open-source, column-oriented database designed specifically for high-performance analytical queries (OLAP – Online Analytical Processing).  
+
+**Core Concepts & How ClickHouse Works:**
+- **Column-Oriented Storage**
+    - Data is stored column-wise instead of row-wise.
+    - Efficient for aggregations and analytics because only necessary columns are read from storage.
+    - **Example:**
+        Given a table:
+
+        | UserID | Age | Country | Purchase |
+        | ------ | --- | ------- | -------- |
+        | 1      | 25  | USA     | 200      |
+        | 2      | 32  | UK      | 500      |
+
+    - Column-wise storage:
+
+        ```
+        UserID:   [1, 2]
+        Age:      [25, 32]
+        Country:  ["USA", "UK"]
+        Purchase: [200, 500]
+        ```
+
+    - **Advantage:** Queries like `AVG(Purchase)` only read the Purchase column, drastically reducing query time.
+
+- **Compression & Indexing**  
+    - Columnar storage allows for better compression because similar data is grouped together.
+    - ClickHouse applies various efficient compression methods like LZ4, ZSTD.
+        - **LZ4:** ClickHouse’s default codec, optimized for very fast compression and decompression with moderate space savings—use it when raw speed matters.
+        - **Zstandard (ZSTD):** Offers higher compression ratios while keeping decode speed close to LZ4—choose it when storage efficiency outweighs absolute speed.
+    - Uses sparse indexing for rapid query filtering.
+        - **What it is** – ClickHouse sorts each data part by the primary-key columns and records *one pointer (“mark”) for the first row of every granule of ≈ 8 192 rows*; this list stays in RAM because it is thousands-of-times smaller than the table.
+        - **How a row is found**
+            - **Binary-search the marks** to locate the granule whose first key is just before (or equal to) the key we asked for.
+            - **Jump straight to that granule on disk** (≤ 8 k rows) and load it. All other granules are skipped.
+            - **Scan inside the granule** to return the exact row(s).
+
+            - **Tiny example** – A table with **1 billion rows** sorted by `event_date` has \~122 000 marks (a few MB). A query
+        `WHERE event_date = '2025-05-01' AND user_id = 42`
+        touches only the two granules for that date (\~16 k rows) and skips the other 99.998 % of the data.
+
+        - Picture it like sticky-notes every 8 000 pages: flip to the nearest note, read a handful of pages, ignore the rest.
+    - **Mental Model:**
+        - Think of indexing like bookmarks in a book. Sparse indexing is like placing bookmarks every few pages to quickly jump to the relevant section without having bookmarks on every single page.
+
+- **Distributed & Parallel Processing**
+    - ClickHouse can distribute data across multiple nodes for scalability.
+    - Queries are executed concurrently on multiple nodes and aggregated for results.
+
+    - **Mental Model:**
+        - Imagine distributing workload evenly across multiple workers; each worker handles part of the task simultaneously, speeding up overall execution time.
+
+- **Vectorized Execution Engine**
+    - Processes data in batches (vectors), taking advantage of CPU cache and SIMD instructions.
+    - Accelerates query performance by optimizing CPU utilization.
+
+- **Real-Time Data Ingestion**
+    - Designed to handle high rates of real-time data insertion efficiently.
+    - Supports batch inserts and continuous streaming ingestion (via Kafka integration, for instance).
+
+- **Real Industry Example:**
+    - **Scenario:** Real-Time Analytics for E-commerce Platform
+        - An e-commerce platform needs real-time analytics on user behavior, transactions, and product trends to optimize marketing campaigns.
+
+    - **Data:**
+        - User clickstream logs (millions of events per minute).
+        - Transaction data (purchases, refunds).
+        - User metadata (location, device, preferences).
+
+    - **Requirements:**
+        - Real-time reporting and dashboards.
+        - Fast aggregation queries like "average purchase per country", "top-selling products", or "daily active users".
+
+- **Solution with ClickHouse:**
+    - **Columnar storage** helps quickly analyze large volumes of clickstream data.
+    - **Compression** significantly reduces storage cost and I/O overhead.
+    - **Distributed nodes** handle massive data loads by scaling horizontally.
+    - **Real-time ingestion** via Kafka streams ensures instant data availability for immediate analytics.
+
+    - **Outcome:**
+        - Queries that previously took minutes now execute in seconds or milliseconds.
+        - The marketing team gains actionable insights in near real-time.
+
+- **Summary Mental Model:**
+    - ClickHouse efficiently processes analytical queries on large-scale datasets by storing data in compressed, indexed columns, distributing workloads across clusters, and executing queries with optimized, parallelized computations, ideal for high-speed real-time analytics.
+
+Comparison - ClickHouse vs Cassandra
+
+**In one sentence:** Use **ClickHouse** when we mostly *append data and ask big summary questions* (analytics), and use **Cassandra** when we need *constant, quick updates and look-ups* (operational storage).
+
+
+| What we care about       | ClickHouse                                                                                                                                                                    | Cassandra                                                                                                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **How data sits on disk** | Packs each **column** together, so reading one column is very fast — perfect for crunching numbers across billions of rows.                             | Stores complete **rows** in immutable files called **SSTables (Sorted String Tables)**; each row lives “wide” and is easy to fetch by key. |
+| **Typical workload**      | **OLAP (Online Analytical Processing)** → many records in, few big reports out.                                                                                | **OLTP (Online Transactional Processing)** → lots of quick inserts, updates, reads.                                                                                        |
+| **Writing data**          | Best at *append-only* streams (logs, events). Updates rewrite whole data parts, so keep them rare.                                                     | Handles steady inserts **and** field updates; each row/column can have a **TTL (Time To Live)** to expire old data.                                                   |
+| **Reading data**          | Reads columns in batches and uses CPU features that treat many numbers at once (**SIMD – Single Instruction Multiple Data**) for speed.               | Fetches whole rows or short ranges by key; we can tune read/write consistency for each request.                                                              |
+| **Compression**           | Uses fast codecs such as **LZ4 (very quick)** and **ZSTD / Zstandard (better compression, still fast)** to shrink each column. | Compresses entire SSTables; no special column tricks.                                                                                                                 |
+| **Scaling out**           | Shard for more write speed and replica for high availability; ideal for huge analytic clusters.                                                        | Adds nodes to grow capacity; replicates to multiple **data centres (DCs)** for global uptime.                                                                 |
+
+Mental picture
+- **ClickHouse**
+    - Columns are lined up together, squished with LZ4/ZSTD, and the CPU chews through them a few thousand values at a time.
+    - Great when the question is “How many, how fast, top-N?” across massive logs.
+
+- **Cassandra**
+    - Every user or device has a row; we flip to the right page (partition key) and read or update it in milliseconds, no matter the region.
+
+When to pick which (real-life sketches)
+
+| Situation                                                       | Choose ClickHouse                                                     | Choose Cassandra                                                                 |
+| --------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Ad-tech dashboard** tracking billions of impressions per hour | Needs lightning-quick counts and averages over fresh event data.      | —                                                                                |
+| **Shopping-cart / session store** for a global e-commerce site  | —                                                                     | Needs constant row updates and fast look-ups close to users in multiple regions. |
+| **IoT sensor flood** (temperatures every second)                | Append-only time series; roll-ups like “average per minute” run fast. | Could store raw data, but large scans would be slower.                           |
+
+Key take-away
+- Ask **big summaries over mostly immutable data? → ClickHouse**
+- Need **instant row reads/updates everywhere? → Cassandra**
+
+⚙️ Apache Flink  
+Apache Flink is easiest to picture as a **fault-tolerant assembly line**: events roll off an input belt (sources), pass through machines that can filter, group or count while remembering a little state (operators on TaskManagers, orchestrated by a JobManager), get photographed every few seconds so nothing is lost (checkpoints), and finally drop into output bins (sinks).
+
+Visual overview  
+```
+┌────────────┐   events   ┌────────────┐   tasks   ┌────────────────┐   results   ┌──────────────┐
+│  SOURCES   │ ─────────▶ │ JobManager │ ────────▶ │ TaskManagers   │ ───────────▶│    SINKS     │
+│ (Kafka …)  │            │  (planner) │           │ (workers)      │             │ (DB, Kafka…) │
+└────────────┘            └────────────┘           └────────────────┘             └──────────────┘
+        ▲ periodic snapshots                    ▲ exactly-once recovery
+        └─────────── checkpoints ───────────────┘
+```
+
+- Where data comes from
+    - Flink **doesn’t store data**; it plugs into Kafka, Kinesis, files, JDBC tables and dozens more via ready-made connectors that turn each feed into a stream as soon as the job starts.
+
+- What happens inside **Flink engine**
+    - Cluster roles
+        - **JobManager** (traffic cop) builds the flow graph and coordinates checkpoints.
+        - **TaskManager** is just **one Java (JVM) worker-process**; we chop its CPU + memory into **task-slots**, and **each slot runs one sub-task in its own thread**, so the more slots we configure, the more work that single JVM can do in parallel.
+
+        - The **Java Virtual Machine (JVM)** is a small “software computer” that sits on top of our real hardware: it reads platform-neutral *.class* byte-code, turns each instruction into the native ones our CPU understands, and quietly handles chores like memory clean-up, so the *same* compiled file can run unchanged on Windows, Linux, or macOS.
+
+            - **Example**
+                1. Write `HelloWorld.java` and compile once to `HelloWorld.class` byte-code.
+                2. Copy that single *.class* file to three different machines (Windows, Linux, Mac).
+                3. On each machine just type `java HelloWorld`; the local JVM translates and runs the code, and every screen prints **Hello World**—no recompilation needed.
+
+            - **How does the above relate to Flink?**  
+                - Each Flink job is compiled into .class byte-code files that are bundled into a JAR.
+                - **What’s a JAR, and why does Flink use it?**
+                    - **JAR (Java Archive)** = one ZIP-like file that bundles **all** the compiled `.class` files, third-party libraries, resources (SQL, images, config) and a small *manifest* that tells Java which class has the `main()` entry point.
+                    - **Why bundle?** A real Flink job often needs hundreds of classes plus jars from Kafka, Jackson, etc. Sending a single JAR keeps every byte in one package, cuts transfer time, preserves directory layout, and lets us sign or version the whole lot at once.
+                    - **How Flink uses it:** when we run `flink run myJob.jar`, the JobManager copies that JAR to every TaskManager JVM; each TaskManager’s class-loader opens the archive, loads the contained `.class` files into memory, and starts the operators.
+                    - **Why not ship raw `.class` files?** We’d have to send dozens of files and their resource folders separately, recreate the exact paths on every worker, and still tell Java which one to run. A single JAR eliminates that bookkeeping and guarantees every TaskManager sees the identical code and dependencies.
+
+    - **Concrete operator example**
+        *Scenario – counting product clicks every minute*
+
+        | Cluster piece                | What happens                                                                                                                                                                                                                                                        |
+        | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+        | **TaskManager with 4 slots** | The job’s pipeline is `map` (parse JSON) → `keyBy(productId)` → `tumblingWindow(1 min)` → `sum(1)` (count). Flink deploys **four identical copies** of that operator chain—one per slot—so each slot handles a different slice of the Kafka topic at the same time. |
+        | **Parallelism = 4**          | All four slots are busy; every click is parsed, grouped, windowed, and counted exactly once, but spreads across the four threads for speed.                                                                                                                         |
+        | **Need parallelism = 8**     | Start a second TaskManager with 4 more slots (or raise slots on the first). Flink automatically places the extra four sub-tasks there, doubling throughput without spinning up extra JVMs per task.                                                                 |
+
+        The tumbling-window operator in the chain closes its 60-second bucket once the watermark moves past the minute mark, emitting stable per-product counts downstream.
+
+    - Data-flow & operators
+        - Our code becomes a directed graph of simple operators (`map`, `filter`, `keyBy`, `window`, …) that the JobManager chains into pipelines and ships to workers for continuous execution.
+
+    - State & fault-tolerance (preview)
+        - Operators can keep counters, joins or ML features in memory or RocksDB; periodic checkpoints snapshot that state so a crash rewinds to the last photo with **exactly-once** guarantees.
+
+- Where data goes — **Sinks**
+    - The processed stream is pushed out through connectors just like the inputs—to Kafka, Elasticsearch, JDBC DBs, S3, Redis and more. Transaction-aware sinks join the checkpoint to extend exactly-once all the way out.
+        - **Buffer location** – When a checkpoint starts, each sink-operator thread (running inside a TaskManager JVM) opens an **un-committed transaction**:
+            - for Kafka, it’s the producer’s in-memory buffer + a Kafka *transaction* that is still invisible to readers
+            - for JDBC/MySQL, it’s the driver’s send-buffer plus the database’s open SQL transaction
+            All outgoing records stay in that transaction until the checkpoint verdict arrives.
+
+        - **Commit point** – If the JobManager says “checkpoint succeeded”, the sink **commits** the open transaction (Kafka `commitTransaction()`, SQL `COMMIT`) right away; otherwise it **aborts/ROLLBACKs** and those records are replayed later
+
+        - **“Visible exactly once”** means downstream readers can see the batch **only after the single successful commit**, and because any earlier, crash-time writes were rolled back, the same record will never appear twice nor disappear
+
+        - *One-liner mental model:* the sink keeps new rows in a sealed box during the snapshot; a green light commits the box, a red light dumps it, so the world outside Flink sees each record **once and only once**.
+
+                                    ┌───────────────── Flink Checkpoint ────────────────┐
+                TaskManager JVM │  (operator thread)                                 │       External System
+                ────────────────┼────────────────────────────────────────────────────┼───────────────────────────
+                                │                                                    │
+                                │ 1. Begin TX & BUFFER records                       │
+                Kafka Example   │  ┌────────────┐            Kafka Producer          │  ┌─────────────┐
+                                │  │  TX-101    │══════════▶│  TX Buffer  │═════════▶│    Kafka Topic │
+                                │  │(in memory) │           │ (uncommitted) │        │    (visible)   │
+                                │  └────────────┘                                    │  └─────────────┘
+                                │                ▲                                   │
+                                │                │ abort on failure                  │
+                                │ 2. COMMIT TX-101 on checkpoint success             │
+                ────────────────┼────────────────────────────────────────────────────┼───────────────────────────
+                                │                                                    │
+                                │ 1. Begin TX & BUFFER rows                          │
+                MySQL Example   │  ┌────────────┐            JDBC Driver             │  ┌──────────────┐
+                                │  │  TX-42     │══════════▶│  Pending rows │═══════▶│     MySQL Table │
+                                │  │(in memory) │           │ (uncommitted) │        │    (visible)    │
+                                │  └────────────┘                                    │  └──────────────┘
+                                │                ▲                                   │
+                                │                │ rollback on failure               │
+                                │ 2. COMMIT TX-42 on checkpoint success              │
+                                └────────────────────────────────────────────────────┘
+
+- Mini industry example — live product-view counts
+    1. Nginx logs flow into **Kafka** (source).
+    2. Flink reads, parses JSON, groups by `productId` (`map`, `keyBy`).
+    3. A **tumbling 1-minute window** counts views.
+    4. Counts are written to **Redis** (sink).
+    5. Grafana graphs the numbers.
+    The same pattern scales to millions of events per second for Uber’s surge-pricing features.
+
+Time & Reliability essentials
+
+| Piece                                        | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 3-line example                                                                                                                                                                                                                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Checkpoint = safety photo**                | Every *N* seconds the JobManager inserts a **barrier**; when that marker reaches each TaskManager, the task quickly writes its in-memory state **and** the last Kafka/MySQL offsets to durable storage, then keeps working. If a node dies, Flink restarts from that photo, rewinds the sources to the saved offsets, and replays the missing events — so nothing is lost or processed twice. | Counter is **42** at snapshot → crash at **47** → recovery loads 42, replays five events, ends again at **47** (no gaps, no double counts).                                                                                                                                     |
+| **Event-time + Watermark = on-time windows** | Each event carries its “happened-at” timestamp. A **watermark** (e.g., “latest-seen minus 2 s”) moves with the stream; when it passes the end of a window, Flink knows “everything earlier is probably in—emit now.” This lets it cope with out-of-order events without waiting forever.                                                                                                    | 1-min tumbling window 12:00-12:00:59. Last event arrives at 12:01:01; watermark = 12:00:59.01 → window closes, count is emitted. A stray click stamped 12:00:45 that arrives later is flagged as “late”; our job can drop it or merge it, but it never opens the window again. |
+
+**Mental picture:** the *watermark* is the belt’s timer telling machines a time bucket is “done”; the *checkpoint* is the safety photo that lets the factory rewind after a fault and still ship each finished bucket **exactly once**.
+
+A Flink **barrier** is just a tiny control record—internally an object like
+`CheckpointBarrier(id=42, timestamp=..., options=...)`—that is injected into the stream and travels between normal data records, so in the byte flow we’d see something like
+
+```
+…  eventA  eventB  [Barrier#42]  eventC  …
+```
+
+where `[Barrier#42]` marks “everything before me is in snapshot 42; everything after goes to the next one.
+
+- Why do events arrive out of order if “Kafka is append-only”?
+    - **Order is only per partition.** Kafka guarantees the order **inside** a single partition, not across all of them; when producers use several partitions for throughput, consumers see an interleaving that looks out-of-order globally.
+    - **Network and retries add more shuffle.** Retries after a brief broker hiccup or slow network path can make an older event show up after a newer one in the same partition.
+
+- What does Flink do with a late (out-of-order) event?  
+    - **If a record arrives after the window closed** (i.e., its time ≤ closed window end) Flink routes it according to the job’s *late-data policy*: drop, side-output, or (with “allowed lateness”) reopen and fix the aggregate.  
+    - **Scenario** 1-minute tumbling window counts product clicks ( 12:00:00-12:00:59 ).  
+    At 12:01:03 the window closes and emits **42** clicks. A straggler stamped 12:00:45 arrives at 12:01:07—later than the watermark.
+
+        | Late-data policy               | What Flink does                                                                                                              | Micro-example outcome                                                                                        |
+        | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+        | **Drop** (default)             | Late record is ignored.                                                                                                      | Final count stays **42**; straggler vanishes.                                                                |
+        | **Side-output**                | Late record is routed to a separate “late-events” stream we defined.                                                        | Main result stays **42**; the `(productId, 1)` tuple appears in the side stream for custom handling/logging. |
+        | **Allowed lateness + re-emit** | We set `allowedLateness = 30 s`; Flink reopens the closed window, adds the straggler, and re-emits an **updated count 43**. | Downstream sees first result 42, later an update 43 (exactly once for each).                                 |
+
+- Exactly-once after a failure—how the snapshot prevents double counts
+
+    1. **Barrier sweep** – A tiny marker (barrier) flows with every stream. When all tasks see the same barrier they asynchronously persist their state *and* the input offsets; that’s a **checkpoint**.
+    2. **Two-phase sinks** – Connectors that care about duplicates (e.g., JDBC, Kafka) open a transaction for each checkpoint, write the outgoing records, but *commit* only after the JobManager confirms the snapshot succeeded.
+    3. **Crash & replay** – If a node dies after emitting counts 100–110 but before the commit, Flink rolls back to the last checkpoint (say, count = 99), rewinds Kafka to the saved offsets, replays events 100–110, recomputes the same result, then commits once. No gap, no duplicate.
+
+- Key takeaway
+    - **Data enrichment** means **attaching extra context to each raw event before we aggregate it**.
+        - *Example:* a stream of `orderId, productId, qty` events is **lookup-joined** with a MySQL product table (or a broadcast catalog stream) so every record now carries `productName, price` as well; Flink offers broadcast state joins and temporal/lookup joins to do this in-flight.
+
+    - **Re-framed pipeline**
+        - *Events arrive → operators **enrich** (add product info) & **aggregate** (sum qty) while holding state → watermarks close the right time-windows → checkpoints snapshot state + input positions → on any failure Flink rewinds to that snapshot → transactional sinks commit once → clean results flow out.*
+
+- **Watermark vs Barrier**
+
+    - **Watermark**
+    *What it is* – a special timestamp record (`Watermark{time= T}`) that a source or operator inserts every few events. It moves with the data and tells Flink “all events with `event-time ≤ T` have probably arrived.” When a window’s end time is ≤ the latest watermark, the window can safely close even if later events are still in flight.
+
+    - **Barrier**
+    *What it is* – a control record (`CheckpointBarrier{id= 77}`) that the JobManager injects at the start of a checkpoint. It never overtakes data: everything before the barrier belongs to snapshot 77; everything after belongs to the next snapshot. Operators snapshot state when the barrier reaches them, enabling exactly-once recovery.
+
+    - **How they appear in the byte stream**
+
+        ```
+        …  eventA(t=12:00:01)  eventB(t=12:00:02)
+            Watermark(12:00:02)
+            eventC(t=12:00:03)
+            CheckpointBarrier#77
+            eventD(t=12:00:04)  …
+        ```
+
+    - **Tiny example**
+    *Watermark use* – A 10-second tumbling window (12:00:00-12:00:09) closes when it sees `Watermark(12:00:09)`, emits its count, and starts the next window.
+    *Barrier use* – The same stream hits `Barrier#77`; every task snapshots state (e.g., current count = 42) and source offsets. If a node fails later, Flink reloads snapshot 77 and replays from those offsets, guaranteeing no lost or duplicate events.
+
+Sources:  
+[Flink architecture](https://nightlies.apache.org/flink/flink-docs-master/docs/concepts/flink-architecture)  
+[Uber streaming pipelines](https://www.uber.com/blog/building-scalable-streaming-pipelines)
+
 ---
 
 ## Database
