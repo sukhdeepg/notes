@@ -304,6 +304,8 @@ Same CDN URL served from CloudFront cache (fast\!)
 | SRV (Service record) | Defines the hostname and port for a specific service. | _sip._tcp.example.com → sip.example.com:5060 *(VoIP clients use this to locate the SIP server)* | • Commonly used for protocols like SIP (_sip._tcp), XMPP (_xmpp-server._tcp), LDAP (_ldap._tcp), etc.<br>• Specifies the target host and port number for the service.<br>• Clients query _service._proto.name (e.g., _sip._tcp.example.com) to discover and connect without hardcoding ports. |
 | PTR (Pointer record) | Performs reverse lookup: maps an IP address back to a hostname. | 142.250.190.46 → google.com *(used by mail servers and logging systems to verify that an IP matches a domain)* | • Reverse DNS (PTR) records are managed by whoever controls the IP block (often our hosting provider or ISP).<br>• To set up or change a PTR record, we must request it from the IP block owner.<br>• Crucial for mail servers—many mail systems reject incoming messages if the sending IP's PTR doesn't match its HELO/EHLO hostname. |
 
+⚙️ [How to properly use CloudFront to Cache an API with Cache-Control and HTTP 304 to provide cache revalidation functionality.](https://readmedium.com/how-to-properly-use-cloudfront-to-cache-an-api-with-cache-control-and-http-304-to-provide-cache-b893f6822475)
+
 ---
 
 ## Architecture
