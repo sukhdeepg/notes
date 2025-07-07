@@ -306,6 +306,35 @@ Same CDN URL served from CloudFront cache (fast\!)
 
 ⚙️ [How to properly use CloudFront to Cache an API with Cache-Control and HTTP 304 to provide cache revalidation functionality.](https://readmedium.com/how-to-properly-use-cloudfront-to-cache-an-api-with-cache-control-and-http-304-to-provide-cache-b893f6822475)
 
+⚙️ Different types of latencies  
+- **Processing (service) latency**
+  - Time spent doing the work.
+  - *Example:* A photo-filter API takes 15 ms of CPU time to apply effects.
+
+- **Queuing latency**
+  - Time a request waits before being processed.
+  - *Example:* Under heavy load, our HTTP request sits in the server’s backlog for 50 ms.
+
+- **Propagation delay**
+  - Time for a signal to travel through the medium.
+  - *Example:* A one-way trip to a geostationary satellite adds ≈240 ms.
+
+- **Transmission (serialization) delay**
+  - Time to push all bits onto the wire.
+  - *Example:* Sending a 1 MB file over a 10 Mbps link takes ≈0.8 s.
+
+- **Round-trip latency**
+  - End-to-end there-and-back time.
+  - *Example:* A typical transcontinental ping is \~100 ms RTT.
+
+- **Tail (percentile) latency**
+  - The slowest X% of requests—captures worst cases.
+  - *Example:* p99 web-page loads might spike to 500 ms even if average is 100 ms.
+
+- **Jitter**
+  - Variation in packet delay.
+  - *Example:* VoIP calls suffer choppy audio when jitter exceeds 30 ms.
+
 ---
 
 ## Architecture
