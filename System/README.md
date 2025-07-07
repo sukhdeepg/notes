@@ -1741,6 +1741,111 @@ Sources:
 [Flink architecture](https://nightlies.apache.org/flink/flink-docs-master/docs/concepts/flink-architecture)  
 [Uber streaming pipelines](https://www.uber.com/blog/building-scalable-streaming-pipelines)
 
+⚙️ Reliability in distributed locking  
+Mental model first  
+A **distributed lock** is simply *“a note in a shared place saying who owns the resource and until when.”*
+Failures that can erase or duplicate that note come from three directions:
+
+| Failure class            | What happens                                                       | Consequence                                    |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------- |
+| **Process / node crash** | Redis or the host dies                                             | Lock key disappears → anyone can grab the item |
+| **Replication gap**      | Master dies, a replica takes over but hasn’t received the lock yet | New master doesn’t remember the lock           |
+| **Network partition**    | App ↔ Redis link breaks                                            | Holder can’t renew; others think lock expired  |
+
+Design is about containing those three.
+
+Terms to know:  
+* **AZ (Availability Zone)** – one data-centre building; losing an AZ = that whole building goes dark.
+* **Fencing token** – every successful lock returns an ever-increasing number (1, 2, 3…). Down-stream writes must carry that number; if a stale owner with token 3 tries to write after token 4 exists, the DB rejects it.
+* **CAS (Compare-And-Swap)** – “update row **only if** version =X”; a single SQL statement that succeeds for one caller and returns 0 rows for the rest.
+* **Advisory lock** – a lock managed by the DB engine (e.g. `pg_try_advisory_lock`) instead of Redis; we must code our app to respect it.
+* **Timeout tuning** – choosing how long the lease lasts (e.g. 5 s) and how often the owner renews it (e.g. every 2 s). Shorter leases shrink the danger window if the owner dies.
+
+Main approaches (ascending reliability)  
+| # | Technique                     | How it works                                                    | Survives                 | When it’s enough                         | Common tech                                |
+| - | ----------------------------- | --------------------------------------------------------------- | ------------------------ | ---------------------------------------- | ------------------------------------------ |
+| 1 | **Single Redis key with TTL** | `SET key NX PX 5000`; app renews                                | *No* Redis crash         | Very small app, best-effort stock limit  | Redis                                      |
+| 2 | **Redis Sentinel / Cluster**  | 3+ nodes, one leader, async replicas                            | 1 node crash             | Medium traffic; brief oversell tolerated | Managed-Redis, ElastiCache                 |
+| 3 | **Redlock**                   | Same key written to 5 independent Redis nodes; need quorum (≥3) | 2 node crashes, AZ loss  | High read/write rate; sub-ms latency     | Redisson, Redlock-Ruby                     |
+| 4 | **Consensus KV store**        | Lock stored through Raft/Zab                                    | Any single-AZ loss       | Strong consistency beats latency         | etcd, ZooKeeper, Consul                    |
+| 5 | **DB row + CAS (fencing)**    | `UPDATE stock SET qty = qty-1 WHERE id=… AND version=42`        | All app / cache failures | Ultimate correctness; fewer writes/sec   | Postgres advisory locks, MySQL row-version |
+
+Putting it together for a flash-sale checkout  
+1. **Acquire short lease**
+
+   ```redis
+   SET item:123 owner=svc-42 NX PX 5000
+   INCR item:123:fence   --> returns 58
+   ```
+2. **Return fencing token 58 to checkout service.**
+3. **Service renews key every 2 s**; if renewal fails, abort payment and show “Please try again”.
+4. **Final stock decrement** uses the token:
+
+   ```sql
+   UPDATE items
+   SET stock = stock-1 , version = 58
+   WHERE id = 123 AND version = 57;
+   ```
+
+   Exactly one row updates; if 0, another buyer already won.
+5. **DEL item:123** after success.
+
+Even if Redis dies mid-sale, the service notices within 2 s (failed renew) and no longer trusts the lock; the DB write with an old token will be rejected, preventing double-sell.
+
+Industry level example  
+- **Shopify flash-sale engine (“Launchpad”)** – moved from Redis locks to MySQL row-versioning + advisory locks once volume grew.
+- **Grab ride-allocation** – uses etcd locks with fencing tokens across three AZs for <100 ms median latency.
+- **Netflix Conductor** – relies on Dynomite (Redis-compatible) quorum locks for orchestration steps.
+
+⚙️ Fencing token  
+Picture the problem — “the double-charge”  
+*Flash-sale site, 1 item left.*  
+- **Alice clicks BUY**
+  - Checkout service asks Redis **“May I?”**
+  - Redis replies **“Yes, you’re buyer #42”** (fencing token 42) and starts a 5 -second lease.
+- **While Alice enters card details** the service **keeps pinging Redis every 2 s** to renew the lease.
+- **Redis crashes** → lease cannot be renewed → after 5 s the lock is gone.
+- **Bob clicks BUY**
+  - New Redis leader answers **“Yes, you’re buyer #43.”**
+
+**Both services now try to write “sold” to the database.**  
+| Buyer | SQL attempted                                              | Database sees              | Result               |
+| ----- | ---------------------------------------------------------- | -------------------------- | -------------------- |
+| Alice | `UPDATE item SET stock = stock-1 WHERE id=1 AND token<42;` | current `token = 43`       | **0 rows → fails**   |
+| Bob   | `UPDATE item SET stock = stock-1 WHERE id=1 AND token<43;` | token = 43 ➜ `<43` is true | **1 row → succeeds** |
+
+Because the table keeps **the highest token ever written**, any late or “zombie” owner is fenced out automatically. No double-charge.
+
+Who updates the DB?  
+The *same checkout service that grabbed the lock* is the one that runs the SQL UPDATE.
+Redis (or ZooKeeper/etcd) only hands out the fencing number; the database itself enforces “newest-number wins”.
+
+Minimal, real-world sequence
+- **Service A** gets lock
+  - `SETNX item:1 …` → Redis returns **token 42**.
+- **Service A** does the business work (talk to payment API, etc.).
+- **Service A** commits the result:
+   ```sql
+   UPDATE items
+      SET stock = stock-1,
+          token = 42
+    WHERE id = 1       -- the item
+      AND token < 42;  -- only if my token is newer
+   ```
+- DB updates one row ⇒ success.
+
+If another instance (**Service B**, token 43) reaches this step first, the row now stores `token = 43`.
+When the older Service A finally tries its UPDATE, the `token < 42` clause is false, so **0 rows change** → Service A knows it lost and rolls back.
+
+**Who touches the DB?**
+Only the application instances (checkout services) do.
+**Who guarantees order?**
+The SQL `WHERE token < ?` guard inside the database.
+
+Mental model  
+**Token = time-stamp that only moves forward; the database accepts the newest stamp and silently blocks all older ones.**  
+That’s it, no matter who crashes, wakes up, or lags, an outdated stamp can’t hurt inventory.
+
 ---
 
 ## Database
