@@ -2393,6 +2393,9 @@ Step-by-Step Flow
     - **Secondary**: Find `<X, PK>` in the leaf, then do a **second B+Tree search** in the clustered index to fetch the row
 - **Return Data** - The row is sent back to the client. If pages were dirty (modified), they'll be flushed to disk later, but we've already got our result
 
+⚙️ Cross shard queries
+![image](https://github.com/user-attachments/assets/4a481221-3f17-46de-85f2-f63b5b9b2780)
+
 ---
 
 ## Microservice patterns
