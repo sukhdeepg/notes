@@ -177,6 +177,37 @@ while True:
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
+⚙️ Why `asyncio` is faster than `threading` module  
+> `asyncio` juggles 10,000+ waits with one thread
+
+- **One worker, many jobs**
+    - We run a **single** operating-system thread (usually the main one).
+    - Inside that thread lives the **event-loop**. A forever-running `while True` that decides *which* coroutine gets CPU time next.
+- **Jobs hand back control themselves**
+    - A coroutine is just a Python function that can **pause** at an `await` and later **resume** right where it left off.
+    - When it reaches an `await` that would block (e.g., “wait for data from the network”), it *voluntarily* pauses and the loop immediately moves on to another coroutine that is ready.
+- **Tiny pause-and-resume record**
+    - To come back later, Python stores a **small “bookmark”**, roughly 1–2 KB, holding local variables and the next line to run.
+    - Compare that with a real thread: the OS reserves roughly **0.5–2 MB** of stack memory even if the thread is mostly idle.
+    - Result: we can keep **tens of thousands** of coroutine bookmarks in the same space that just a few hundred threads would need.
+- **The OS gives a ready-made short list**
+    - The event-loop asks the kernel, “Which of my sockets just got data?” using `epoll` (Linux) or `kqueue` (macOS/BSD).
+    - The kernel **already knows** which sockets woke up and hands back only that short list, maybe 5 out of 10 000. No need to scan them all again.
+- **No expensive “kernel jump” on every switch**
+    - All coroutine switches happen in **user space** (your program’s normal area).
+    - A real thread switch forces the CPU to jump into the **kernel** (the privileged core of the OS) and back out, which costs a few micro-seconds.
+        - When the computer swaps threads, it pauses our program, runs some operating-system code, then returns. This detour takes a few microseconds.
+        - "some operating-system code" - the OS scheduler must save the current thread’s registers, pick the next thread in its queue, and load that thread’s registers before letting our program continue.
+    - Coroutine switches stay in user space and take just a few hundred nano-seconds.
+        - User space = ring-3 (least-privileged CPU mode for regular programs), non-privileged CPU mode where each process runs inside its own virtual-memory page table; only on a system call does the CPU switch to ring-0 (most-privileged CPU mode where the operating system runs) kernel space (privileged mode) to execute scheduler, drivers, or other core OS code. 
+- **What if you need real parallel CPU work?**
+    - That single thread can still only execute one Python instruction at a time (because of the GIL).
+    - When we hit heavy number-crunching, hand those tasks off to a `ProcessPoolExecutor` (separate processes, separate CPUs) and let the event-loop keep handling the I/O waits.
+
+> “`asyncio` keeps one thread asking the OS which sockets are ready and only resumes the coroutines that need attention. Each coroutine’s pause-state is just a 2 KB bookmark, and switching between them never leaves user space, so one thread can juggle tens of thousands of I/O waits where hundreds of real threads would run out of memory and slow down.”
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
 ⚙️ Normal, class and static methods in Python  
 - **Normal (Instance) Methods**
     - Bound to specific object instances
