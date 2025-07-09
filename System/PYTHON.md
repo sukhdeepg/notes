@@ -130,6 +130,53 @@ Core Concept: Daemon threads in Python are background threads that automatically
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
+⚙️ `select`, `epoll`, and `kqueue`  
+Imagine we’re writing a chat server.  
+We might have **10 000 client connections** open at once, but at any given moment only a few of them send data.  
+Our program has to sit there asking:
+
+> “Did **any** of my connections get a new message? If yes, which ones?”
+
+Doing that one connection at a time would be painfully slow, so operating systems give us helper calls that watch **many** connections simultaneously.  
+
+---
+
+| Name                           | How you use it                                                                                                                                           | What’s happening under the hood                                                                                                               | Good for                                          |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **`select`** (old, everywhere) | Every time we ask, we hand the OS a **list of sockets** (e.g. `[sock1, sock2, …]`). The OS scans the whole list and tells us which sockets are ready. | The scanning work is repeated on every call, so big lists (thousands of sockets) get slower and slower.                                       | Small programs with only a few dozen connections. |
+| **`epoll`** (Linux)            | We **register** each socket once (`epoll.register(sock)`). After that we just call `epoll.poll()`, which returns any sockets that became ready.        | The OS keeps an internal “ready” set. No need to rescan our full list each time, so performance stays almost flat even with 100 000 sockets. | High-traffic servers or scrapers on Linux.        |
+| **`kqueue`** (macOS / FreeBSD) | Same idea as `epoll`, different name. We register once, then poll for ready events.                                                                     | Kernel-side ready list, so it scales like `epoll`.                                                                                            | High-traffic servers on macOS or BSD systems.     |
+
+```python
+import selectors, socket
+
+sel = selectors.DefaultSelector()      # Picks epoll on Linux, kqueue on macOS
+
+def watch(sock):
+    sock.listen()
+    sel.register(sock, selectors.EVENT_READ)  # Tell OS: “Wake me if someone connects.”
+
+# make two listening sockets just for demo
+for _ in range(2):
+    s = socket.socket(); s.bind(("localhost", 0))
+    watch(s)
+
+while True:
+    ready = sel.select(timeout=1)      # Under the hood: epoll/kqueue/select
+    for key, _ in ready:               # key.fileobj is the socket that’s ready
+        conn, _ = key.fileobj.accept()
+        print("New client!")
+```
+
+| Step                              | `select` (old way)                           | `epoll` / `kqueue` (modern way)                                                                                 |
+| --------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **1. Setup**                      | —                                            | We say once: “Watch socket A, B, C, … Z.”                                                                      |
+| **2. Data arrives on socket K**   | Nothing yet.                                 | Kernel immediately drops **K** into its internal “ready bucket”.                                                |
+| **3. We ask, “Anything ready?”** | Kernel loops over **A-Z** checking each one. | Kernel looks at the bucket and hands back **\[K]** right away.                                                  |
+| **4. Loop repeats**               | The loop above happens *every* time.         | Only sockets added to the bucket since last call are returned—cost stays low no matter how many you registered. |
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
 ⚙️ Normal, class and static methods in Python  
 - **Normal (Instance) Methods**
     - Bound to specific object instances
