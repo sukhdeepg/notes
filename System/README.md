@@ -2856,40 +2856,24 @@ Generic APIs serve all clients the same way, leading to over-fetching or under-f
 ---
 
 ## Language specific
-⚙️ Python threading and multi-processing  
-**GIL (Global Interpreter Lock)** - Python's fundamental constraint. Only one thread can execute Python bytecode at a time. Think of it as a single bathroom key in an office building.
+⚙️ Python multi-threading and multi-processing  
+**GIL (Global Interpreter Lock)** - Python's fundamental constraint. Only one thread can execute Python bytecode at a time.
 
-- Single Threading
-    - Default Python execution
-    - One task at a time, sequential processing
-    - Simple, predictable, no concurrency issues
+![image](https://github.com/user-attachments/assets/d25bec96-cb94-407e-aa2a-8dcd42cb7348)
 
-- Multi-threading (`threading` module)
+- Multi-threading
     - Multiple threads, but GIL allows only one to run Python code simultaneously
     - **Good for:** I/O-bound tasks (file reading, network requests, database calls)
     - **Bad for:** CPU-intensive tasks (calculations, data processing)
     - Threads can release GIL during I/O operations, allowing others to work
     - Why threading helps with I/O:** When Thread A waits for disk/network, it releases GIL, Thread B can work.
 
-- Multi-processing (`multiprocessing` module)
+- Multi-processing
     - Separate Python processes, each with its own GIL
     - **Good for:** CPU-intensive tasks
     - **Cost:** Higher memory usage, slower inter-process communication
-    - True parallelism for CPU-bound work
-
-- Use Single Threading when:
-    - Simple scripts
-    - Sequential processing is sufficient
-    - Avoiding complexity
-
-- Key Points
-    - **GIL limitation:** Python threading doesn't help CPU-bound tasks
-    - **I/O releases GIL:** Why threading works for network/file operations
-    - **Memory trade-off:** Multiprocessing uses more memory but gets true parallelism
-    - **Language comparison:** Java and Go have better native concurrency models
-    - **asyncio alternative:** Modern Python also offers async/await for I/O-bound tasks
-
-The mental model: Python threading is like having multiple workers but only one work station - they take turns. Multiprocessing gives each worker their own station but costs more space.
+ 
+<hr width="100%" size="2" color="#007acc" noshade>
 
 ⚙️ Python daemon threads    
 Core Concept: Daemon threads in Python are background threads that automatically terminate when the main program exits, unlike regular threads which keep the program running until they complete.
@@ -2898,10 +2882,8 @@ Core Concept: Daemon threads in Python are background threads that automatically
 - **Definition** - Daemon threads are threads marked with `daemon=True` that run in the background and don't prevent program termination
 - **Lifecycle behavior** - When the main thread finishes, Python immediately kills all daemon threads without waiting for them to complete their work
 - **Setting daemon status** - Use `thread.daemon = True` before calling `thread.start()`, or pass `daemon=True` to the Thread constructor
-- **Default inheritance** - Threads inherit daemon status from their parent thread (main thread is non-daemon by default)
 - **Use cases** - Background tasks like logging, monitoring, periodic cleanup, or services that should stop when the main application stops
 - **Limitations** - Daemon threads cannot perform critical cleanup operations since they may be terminated abruptly mid-execution
-- **Program termination** - Python waits for all non-daemon threads to finish before exiting, but kills daemon threads immediately
 - **Thread safety** - Daemon status doesn't affect thread synchronization requirements - still need locks, queues, etc. for shared resources
 - **Checking status** - Use `thread.daemon` property to check if a thread is marked as daemon
 - **Cannot change after start** - Daemon status must be set before calling `thread.start()`, attempting to change it afterward raises RuntimeError
@@ -2938,11 +2920,6 @@ Core Concept: Daemon threads in Python are background threads that automatically
         def from_birth_year(cls, name, birth_year): # Alternative constructor
             age = 2023 - birth_year
             return cls(name, age) # Creates an Person instance
-
-        # This method is not in the original image but added for context of a static method
-        @staticmethod
-        def is_adult(age):
-            return age > 18
     ```
 
 - **Static Methods**
@@ -2991,13 +2968,6 @@ class Path:
         return os.getcwd()
 ```
 
-- **Mental Model**
-    - **Normal method:** "Do something WITH this specific object."
-    - **Class method:** "Create or access something ABOUT the class itself."
-    - **Static method:** "Utility functions that BELONG with this class conceptually."
-
-Use normal methods for 90% of the time. Use class methods for alternative constructors or class-level operations. Use static methods for utilities that logically belong with the class but don't need class/instance data.
-
 ⚙️ generator and yield in Python  
 A **generator** is a special type of function that returns values one at a time using the `yield` keyword instead of `return`. It pauses execution and resumes where it left off.
 
@@ -3034,18 +3004,4 @@ for square in big_numbers():
     if square > 100:
         break
     print(square)
-```
-
-Generators are perfect for processing large datasets or infinite sequences without consuming excessive memory.
-
-Practical example:
-```python
-def countdown(n):
-    while n > 0:
-        yield n
-        n -= 1
-
-# Usage
-for num in countdown(5):
-    print(num)  # Prints: 5, 4, 3, 2, 1
 ```
