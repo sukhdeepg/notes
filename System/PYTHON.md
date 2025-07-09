@@ -19,6 +19,32 @@
 
 ⚙️ Event loop working
 ![event_loop](https://github.com/user-attachments/assets/8caff9f6-7c6a-4ccd-a801-bba1c8fcb3f8)
+
+Basic asyncio template  
+```python
+import asyncio
+
+async def main():
+    """Main async function - your entry point"""
+    print("Starting async program...")
+    
+    # Your async code goes here
+    await asyncio.sleep(1)  # Simulate async work
+    
+    print("Async program completed!")
+
+# Run the async program
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+- **`import asyncio`** - The core async library
+- **`async def`** - Creates an async function (coroutine) that can be paused and resumed
+- **`await`** - Pauses the current coroutine until the awaited operation completes
+- **`asyncio.run()`** - Runs the async function in the event loop (only use this once at the top level)
+- **`asyncio.sleep()`** - Non-blocking sleep (unlike `time.sleep()` which would block)
+
+The magic of asyncio is in the `await` keyword. It lets other code run while waiting for something to complete (like network requests, file I/O, or delays). This is cooperative multitasking where functions voluntarily yield control.
+
 ```python
 import asyncio
 
@@ -54,6 +80,49 @@ Task A: I/O complete
 Task B: I/O complete
 All tasks done.
 ```
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
+⚙️ The key difference in **blocking vs non-blocking** sleep:  
+**`time.sleep(1)`** - **BLOCKING**
+- Completely freezes our entire program for 1 second
+- Nothing else can run during this time
+- Like putting our whole program to sleep
+
+**`await asyncio.sleep(1)`** - **NON-BLOCKING**
+- Pauses only the current async function for 1 second
+- Other async functions can run during this time
+- Like saying "I'll wait here, but others can keep working"
+
+```python
+import asyncio
+import time
+
+async def worker(name):
+    print(f"{name} starting work...")
+    await asyncio.sleep(2)  # NON-BLOCKING - others can work
+    print(f"{name} finished work!")
+
+async def main():
+    print("With asyncio.sleep (NON-BLOCKING)")
+    start = time.time()
+    
+    # Both workers run concurrently
+    await asyncio.gather(
+        worker("Worker 1"),
+        worker("Worker 2")
+    )
+    
+    print(f"Total time: {time.time() - start:.1f} seconds")
+    print("Notice: Both workers ran at the same time!")
+
+# Run the async program
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Here's a quick example to see the difference:  
+If we used `time.sleep(2)` instead of `await asyncio.sleep(2)`, both workers would run one after the other, taking 4 seconds total. With `asyncio.sleep()`, they run concurrently and finish in just 2 seconds.
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
