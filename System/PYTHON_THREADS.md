@@ -217,6 +217,133 @@ If we used `time.sleep(2)` instead of `await asyncio.sleep(2)`, both workers wou
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
+⚙️ Exception handling with `asyncio`
+```python
+import asyncio
+import random
+
+async def unreliable_api(name, delay, fail_chance=0.3):
+    """Simulate an unreliable API that might fail or be slow"""
+    print(f"🔄 Calling {name}...")
+    await asyncio.sleep(delay)
+    
+    if random.random() < fail_chance:
+        raise Exception(f"❌ {name} failed!")
+    
+    print(f"✅ {name} succeeded!")
+    return f"Data from {name}"
+
+async def slow_api(name, delay):
+    """Simulate a slow API"""
+    print(f"🐌 Calling slow {name}...")
+    await asyncio.sleep(delay)
+    print(f"✅ Slow {name} completed!")
+    return f"Data from {name}"
+
+async def main():    
+    # 1. Try/except with single task
+    print("1. Basic error handling:")
+    try:
+        result = await unreliable_api("API-1", 1)
+        print(f"Success: {result}")
+    except Exception as e:
+        print(f"Error: {e}")
+    
+    print()
+    
+    # 2. Error handling with gather() - one failure stops all
+    print("2. Error handling with gather():")
+    try:
+        results = await asyncio.gather(
+            unreliable_api("API-1", 1),
+            unreliable_api("API-2", 1.5),
+            unreliable_api("API-3", 0.5)
+        )
+        print(f"All succeeded: {results}")
+    except Exception as e:
+        print(f"One failed, all stopped: {e}")
+    
+    print()
+    
+    # 3. Error handling with gather() - continue on failure
+    print("3. Continue on failure with return_exceptions=True:")
+    results = await asyncio.gather(
+        unreliable_api("API-1", 1),
+        unreliable_api("API-2", 1.5),
+        unreliable_api("API-3", 0.5),
+        return_exceptions=True  # Returns exceptions instead of raising
+    )
+    
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            print(f"Task {i+1} failed: {result}")
+        else:
+            print(f"Task {i+1} succeeded: {result}")
+    
+    print()
+    
+    # 4. Timeout handling
+    print("4. Timeout handling:")
+    try:
+        result = await asyncio.wait_for(
+            slow_api("slow-api", 3),  # Takes 3 seconds
+            timeout=2.0  # But we only wait 2 seconds
+        )
+        print(f"Success: {result}")
+    except asyncio.TimeoutError:
+        print("❌ Operation timed out after 2 seconds!")
+    
+    print()
+    
+    # 5. Task cancellation
+    print("5. Task cancellation:")
+    task = asyncio.create_task(slow_api("cancellable-api", 5))
+    
+    # Wait a bit then cancel
+    await asyncio.sleep(1)
+    task.cancel()
+    
+    try:
+        result = await task
+        print(f"Success: {result}")
+    except asyncio.CancelledError:
+        print("❌ Task was cancelled!")
+    
+    print()
+    
+    # 6. Timeout with multiple tasks
+    print("6. Timeout with multiple tasks:")
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(
+                slow_api("slow-1", 1),
+                slow_api("slow-2", 4),  # This one is too slow
+                slow_api("slow-3", 2)
+            ),
+            timeout=3.0
+        )
+        print(f"All completed: {results}")
+    except asyncio.TimeoutError:
+        print("❌ Some tasks took too long!")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+<img width="364" alt="image" src="https://github.com/user-attachments/assets/6d69c90d-ed33-4441-a74e-3b57a3147087" />
+
+1. **`try/except`**: Handle errors in async functions just like regular functions
+2. **`return_exceptions=True`**: In `gather()`, return exceptions instead of stopping everything
+3. **`asyncio.wait_for()`**: Set timeouts for operations
+4. **`asyncio.TimeoutError`**: Raised when operations take too long
+5. **`task.cancel()`**: Cancel running tasks
+6. **`asyncio.CancelledError`**: Raised when a task is cancelled
+
+- Set timeouts for external APIs
+- Use `return_exceptions=True` when you want partial results
+- Cancel tasks to free up resources when we don't need them anymore
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
 ⚙️ Use of `asyncio.open_connection`  
 Used when we need to ingest a never-ending stream of data (logs, metrics, sensor feeds, chat messages, etc.) without ever loading it all into memory. Example: an async log collector that connects over TCP to many servers sending us lines of log text, processes each line as it arrives, and never buffers more than 1 KB at a time.
 ```python
