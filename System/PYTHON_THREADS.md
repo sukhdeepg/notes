@@ -85,6 +85,60 @@ All tasks done.
 
 ⚙️ When to use `gather` and `create_task`?
 
+Code using both
+```python
+import asyncio
+import time
+
+async def fetch_data(url, delay):
+    """Simulate fetching data from a URL"""
+    print(f"🔄 Fetching {url}...")
+    await asyncio.sleep(delay)  # Simulate network delay
+    print(f"✅ Got data from {url}")
+    return f"Data from {url}"
+
+async def main():
+    print("=== LEVEL 2: Multiple Tasks ===\n")
+    
+    # Method 1: await one by one (SEQUENTIAL - slow)
+    print("1. Sequential execution:")
+    start = time.time()
+    result1 = await fetch_data("api.com/users", 1)
+    result2 = await fetch_data("api.com/posts", 2)
+    print(f"Sequential time: {time.time() - start:.1f}s\n")
+    
+    # Method 2: gather() - run concurrently (PARALLEL - fast)
+    print("2. Concurrent with gather():")
+    start = time.time()
+    results = await asyncio.gather(
+        fetch_data("api.com/users", 1),
+        fetch_data("api.com/posts", 2),
+        fetch_data("api.com/comments", 1.5)
+    )
+    print(f"Concurrent time: {time.time() - start:.1f}s")
+    print(f"Results: {results}\n")
+    
+    # Method 3: create_task() - more control
+    print("3. Using create_task():")
+    start = time.time()
+    task1 = asyncio.create_task(fetch_data("api.com/profile", 1))
+    task2 = asyncio.create_task(fetch_data("api.com/settings", 2))
+    
+    # Can do other work here while tasks run in background
+    print("Tasks started, doing other work...")
+    await asyncio.sleep(0.5)
+    print("Other work done, now waiting for tasks...")
+    
+    # Wait for tasks to complete
+    result1 = await task1
+    result2 = await task2
+    print(f"Task time: {time.time() - start:.1f}s")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+<img width="656" alt="image" src="https://github.com/user-attachments/assets/bf6da6c4-bd11-456d-aa41-a010510c6035" />
+
 **Use `asyncio.gather()` when:**
 - We want to run multiple tasks and wait for **ALL** of them to complete
 - We need the results in the **same order** as we passed them
