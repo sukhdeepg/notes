@@ -83,6 +83,43 @@ All tasks done.
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
+⚙️ When to use `gather` and `create_task`?
+
+**Use `asyncio.gather()` when:**
+- We want to run multiple tasks and wait for **ALL** of them to complete
+- We need the results in the **same order** as we passed them
+- Simple "fire and forget all, then collect all results" scenario
+
+```python
+# All tasks, wait for all, get ordered results
+results = await asyncio.gather(task1, task2, task3)
+```
+
+**Use `asyncio.create_task()` when:**
+- We want **more control** over individual tasks
+- We need to do **other work** while tasks run in background
+- We want to wait for tasks at **different times**
+- We might need to **cancel** specific tasks
+- We want to handle **each task's errors** separately
+
+```python
+# Start tasks immediately, control when to wait
+task1 = asyncio.create_task(fetch_data())
+task2 = asyncio.create_task(fetch_data())
+
+# Do other work...
+await asyncio.sleep(1)
+
+# Wait for specific task when we need it
+result1 = await task1  # Wait for this one now
+# Maybe cancel task2 if needed
+result2 = await task2  # Wait for this one later
+```
+
+**Quick rule**: Use `gather()` for simple parallel execution, use `create_task()` when we need more control over timing and individual task management.
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
 ⚙️ The key difference in **blocking vs non-blocking** sleep:  
 **`time.sleep(1)`** - **BLOCKING**
 - Completely freezes our entire program for 1 second
