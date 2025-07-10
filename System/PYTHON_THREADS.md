@@ -342,6 +342,88 @@ asyncio.run(main())
 
 <hr width="100%" size="2" color="#007acc" noshade>
 
+⚙️ Difference between `asyncio.create_task` and `asyncio.wait_for`. All the different ways to create a task.  
+**`asyncio.create_task` vs. `asyncio.wait_for`**
+- **Purpose**
+    - `create_task(coro)`
+        - **What it does**: “Hand this coroutine over to the event loop right now – run it in the background.”
+        - **Return value**: A `Task` object we can `await` later (or let it run fire-and-forget).
+        - **Typical use**: We want true concurrency, kick off multiple coroutines and handle their results whenever we like (e.g. with `as_completed`, callbacks, `await task`, etc.).
+    - wait_for(awaitable, timeout)`
+        - **What it does**: “Wait up to `timeout` seconds for this awaitable to finish; if it exceeds the timeout, cancel it and raise `asyncio.TimeoutError`.”
+        - **Under the hood**: If we pass in a bare coroutine, it first wraps it into a `Task` for us, then waits on that task.
+        - **Typical use**: We need a deadline on a single coroutine or future. E.g. “give me the result in 5 s or bail out.”
+
+- **Key differences**  
+   | Aspect                | `create_task`                            | `wait_for`                                         |
+   | --------------------- | ---------------------------------------- | -------------------------------------------------- |
+   | Scheduling            | Immediately schedules the coroutine      | Wraps+ schedules only if we pass a bare coroutine  |
+   | Return                | A `Task` we manage ourself               | The result of the awaitable (or raises on timeout) |
+   | Timeout support       | None                                     | Built-in timeout handling                          |
+   | Cancellation behavior | We cancel it manually (`task.cancel()`)  | On timeout it cancels the wrapped task             |
+
+**Example**
+```python
+import asyncio
+async def slow_op():
+    await asyncio.sleep(3)
+    return "✔ done"
+
+async def demo():
+    # create_task: starts immediately, no timeout
+    task = asyncio.create_task(slow_op())
+
+    # wait_for: wraps and waits with timeout
+    try:
+        result = await asyncio.wait_for(task, timeout=1)
+    except asyncio.TimeoutError:
+        print("Timed out after 1 s")
+        # task is cancelled under the hood
+
+        # Even if we caught the timeout, we can check task.cancelled()
+        print("Cancelled?", task.cancelled())
+
+asyncio.run(demo())
+```
+
+Ways to create/schedule a Task  
+- **`asyncio.create_task(coro)`**
+    - Python 3.7+ convenience function.
+    - Always schedules immediately on the running loop.
+- **`loop.create_task(coro)`**
+    - Older, explicit: we grab the loop (`loop = asyncio.get_running_loop()`) then call.
+    - Identical effect to `asyncio.create_task(coro)`.
+- **`asyncio.ensure_future(coro_or_future)`**
+    - Accepts either a coroutine *or* an existing `Future`/`Task`.
+    - If it’s a coroutine, it schedules it (like `create_task`).
+    - If it’s already a future, returns it unchanged.
+- **`asyncio.Task(coro, *, loop=…)`**
+    - Direct constructor for `Task`.
+    - Rarely needed—used for very low-level control.
+
+```python
+import asyncio
+
+async def foo(): ...
+
+# 1. modern: 
+t1 = asyncio.create_task(foo())
+
+# 2. explicit loop:
+loop = asyncio.get_running_loop()
+t2 = loop.create_task(foo())
+
+# 3. ensure_future on coroutine:
+t3 = asyncio.ensure_future(foo())
+
+# 4. lower-level Task constructor:
+t4 = asyncio.Task(foo(), loop=loop)
+```
+
+All four end up scheduling our coroutine on the event loop. `asyncio.create_task` for most new code, or `ensure_future` if we sometimes already have a Future.
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
 ⚙️ Exception handling with `asyncio`
 ```python
 import asyncio
