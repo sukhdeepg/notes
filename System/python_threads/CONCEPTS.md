@@ -78,3 +78,126 @@ while True:
 | **4. Loop repeats**               | The loop above happens *every* time.         | Only sockets added to the bucket since last call are returned—cost stays low no matter how many you registered. |
 
 <hr width="100%" size="2" color="#007acc" noshade>
+
+⚙️ Asyncio vs Threading: Core Differences  
+
+Fundamental Concepts
+| Aspect | Asyncio | Threading |
+|--------|---------|-----------|
+| **Execution Model** | Single-threaded, cooperative | Multi-threaded, preemptive |
+| **When Tasks Switch** | Tasks voluntarily yield (`await`) | OS forcibly switches threads |
+| **Concurrency Type** | Concurrent (interleaved) | Concurrent (interleaved due to GIL) |
+
+**Cooperative**: Tasks voluntarily give up control by calling `await` - they cooperate by yielding when they choose to.
+
+**Preemptive**: The OS forcibly interrupts and switches tasks without asking - it preempts (takes control away from) the running task.
+
+Task/Thread Lifecycle
+| Operation | Asyncio | Threading |
+|-----------|---------|-----------|
+| **Create** | `asyncio.create_task(coro())` | `threading.Thread(target=func)` |
+| **Start** | Automatic when awaited | `thread.start()` |
+| **Wait** | `await task` | `thread.join()` |
+| **Get Result** | `result = await task` | Return via shared variable/queue |
+
+Synchronization
+| Primitive | Asyncio | Threading |
+|-----------|---------|-----------|
+| **Lock** | `async with asyncio.Lock():` | `with threading.Lock():` |
+| **Event** | `await event.wait()` | `event.wait()` |
+| **Queue** | `await queue.get()` | `queue.get()` |
+| **Semaphore** | `async with asyncio.Semaphore():` | `with threading.Semaphore():` |
+
+**Key Syntax Differences**  
+
+Starting Multiple Operations
+```python
+# Asyncio
+async def main():
+    tasks = [process_item(i) for i in range(5)]
+    results = await asyncio.gather(*tasks)
+
+# Threading
+def main():
+    threads = [threading.Thread(target=process_item, args=(i,)) for i in range(5)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+```
+
+Waiting/Blocking
+```python
+# Asyncio - must use await
+await asyncio.sleep(1)
+data = await fetch_data()
+
+# Threading - regular blocking calls
+time.sleep(1)
+data = fetch_data()
+```
+
+Performance Characteristics
+| Aspect | Asyncio | Threading |
+|--------|---------|-----------|
+| **Memory per Task** | ~1KB | ~8MB (thread stack) |
+| **Switching Overhead** | Very low (function call) | Medium (OS scheduling) |
+| **Scalability** | Thousands of tasks | Hundreds of threads |
+| **CPU Usage** | Single core only | Single core (due to GIL) |
+
+Error Handling  
+| Aspect | Asyncio | Threading |
+|--------|---------|-----------|
+| **Exception Propagation** | Through `await` chain | Stays in thread |
+| **Cancellation** | `task.cancel()` | No built-in (use flags) |
+| **Unhandled Exceptions** | Can bubble up | Thread dies silently |
+
+Mental Models  
+**Asyncio**: One worker juggling multiple tasks, switching when waiting for I/O
+- Task says "I need to wait for network" → switches to another task
+- Very efficient for I/O-heavy workloads
+
+**Threading**: Multiple workers, but only one can work at a time (GIL)
+- Thread gets time slice → OS switches to another thread
+- Good for I/O when we need to use blocking libraries
+
+**When to Choose What**  
+Choose Asyncio When:
+- High I/O concurrency (thousands of network requests)
+- Using async libraries (aiohttp, asyncpg)
+- Building async web servers
+- Memory efficiency is important
+
+**Choose Threading When:**
+- Using blocking libraries that don't support async
+- Simpler mental model needed
+- Legacy code integration
+- Mixed I/O and CPU work
+
+**Never Choose Either For:**
+- **CPU-bound tasks** → Use `multiprocessing` instead
+- Both are limited by GIL for CPU work
+
+**Quick Reference**
+```python
+# Asyncio pattern
+async def worker(item):
+    result = await process_async(item)
+    return result
+
+async def main():
+    tasks = [worker(i) for i in items]
+    results = await asyncio.gather(*tasks)
+
+# Threading pattern  
+def worker(item, results, index):
+    result = process_blocking(item)
+    results[index] = result
+
+threads = []
+results = [None] * len(items)
+for i, item in enumerate(items):
+    t = threading.Thread(target=worker, args=(item, results, i))
+    threads.append(t)
+    t.start()
+for t in threads:
+    t.join()
+```
