@@ -117,3 +117,44 @@ for square in big_numbers():
         break
     print(square)
 ```
+
+<hr width="100%" size="2" color="#007acc" noshade>
+
+⚙️ `OrderedDict`  
+Maintains insertion order of keys (like regular dict in Python 3.7+) but adds extra methods for reordering.
+
+**Core Operations & Time Complexity:**  
+
+**Access/Lookup:**
+- `dict[key]` → **O(1)** average
+- `key in dict` → **O(1)** average
+
+**Modification:**
+- `dict[key] = value` (add/update) → **O(1)** average
+- `del dict[key]` (remove) → **O(1)** average
+- `dict.pop(key)` → **O(1)** average
+
+**Ordering Operations:**
+- `dict.move_to_end(key)` → **O(1)** 
+- `dict.move_to_end(key, last=False)` (move to beginning) → **O(1)**
+- `dict.popitem()` (remove last) → **O(1)**
+- `dict.popitem(last=False)` (remove first) → **O(1)**
+
+**Iteration:**
+- Iterate through keys/values/items → **O(n)**
+
+**Example:**
+```python
+from collections import OrderedDict
+
+od = OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+print(od)  # OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+
+od.move_to_end('a')  # Move 'a' to end
+print(od)  # OrderedDict([('b', 2), ('c', 3), ('a', 1)])
+
+od.move_to_end('c', last=False)  # Move 'c' to beginning  
+print(od)  # OrderedDict([('c', 3), ('b', 2), ('a', 1)])
+```
+
+**Key advantage:** Fast reordering operations that would be expensive with regular dicts or lists.
